@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block largeur %}etroit{% endblock %}
+{% block titre %}Mon compte — MCP Memory{% endblock %}
+{% block contenu %}
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Interface web</p>
+    <h1>Mon compte</h1>
+    <p class="sous">Connecté en tant que <strong>{{ utilisateur_courant(request) }}</strong>.</p>
+  </div>
+  <div class="actions">
+    <form method="post" action="/deconnexion"><button>Se déconnecter</button></form>
+  </div>
+</header>
+
+<form method="post" action="/compte/mot-de-passe" class="carte formulaire">
+  <h2>Changer le mot de passe</h2>
+  {% if erreur %}<p class="alerte">{{ erreur }}</p>{% endif %}
+  <input type="text" name="identifiant" value="{{ utilisateur_courant(request) }}" autocomplete="username" hidden>
+  <label>Mot de passe actuel
+    <input type="password" name="ancien" autocomplete="current-password" required></label>
+  <label>Nouveau mot de passe <small class="note">10 caractères minimum</small>
+    <input type="password" name="mdp" autocomplete="new-password" minlength="10" required></label>
+  <label>Confirmation
+    <input type="password" name="confirmation" autocomplete="new-password" minlength="10" required></label>
+  <div><button class="primaire">Enregistrer</button></div>
+  <p class="note">Les autres navigateurs connectés seront déconnectés.</p>
+</form>
+
+<section class="carte">
+  <h2>Mot de passe oublié</h2>
+  <p class="note">Sur le serveur : <code>cd /opt/mcp-memory && docker compose exec web python -m app.compte reinitialiser</code>,
+     puis ouvrir l'interface pour recréer le compte. Les documents ne sont pas touchés.</p>
+</section>
+{% endblock %}

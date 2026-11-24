@@ -1,0 +1,6 @@
+.env
+sauvegardes/
+__pycache__/
+import/
+work/
+.maj/

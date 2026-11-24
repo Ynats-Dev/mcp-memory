@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}Mémoire — MCP Memory{% endblock %}
+{% block contenu %}
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Ce que Claude charge</p>
+    <h1>Mémoire</h1>
+    <p class="sous">Volumes en tokens (estimation : 3,5 caractères par token), coût de démarrage d'une conversation, santé des documents et sauvegarde.</p>
+  </div>
+</header>
+
+<div class="tuiles">
+  <div class="tuile"><span class="tuile-val">{{ total_docs }}</span><span class="tuile-lib">documents</span></div>
+  <div class="tuile"><span class="tuile-val">{{ total_actifs|tokens }}</span><span class="tuile-lib">documents actifs</span></div>
+  <div class="tuile"><span class="tuile-val">{{ total_archives|tokens }}</span><span class="tuile-lib">archives (lues sur demande)</span></div>
+  {% set nb_alertes = projets|map(attribute='alertes')|map('length')|sum %}
+  <div class="tuile {{ 'tuile-alerte' if nb_alertes }}"><span class="tuile-val">{{ nb_alertes }}</span><span class="tuile-lib">point{{ 's' if nb_alertes > 1 }} de santé</span></div>
+</div>
+
+<section class="carte">
+  <h2>Par projet</h2>
+  <div class="tableau-defile">
+  <table class="tableau">
+    <thead><tr><th>Projet</th><th class="nb">Documents</th><th class="nb">Démarrage</th><th class="nb">Actifs</th><th class="nb">Archives</th><th>Fiche résumé</th><th>Dernière modification</th><th class="nb">Santé</th></tr></thead>
+    <tbody>
+    {% for p in projets %}
+      <tr>
+        <td><a href="/projet/{{ p.slug }}">{{ p.titre }}</a></td>
+        <td class="nb">{{ p.docs|length }}</td>
+        <td class="nb" title="Fiche résumé + index renvoyés par vue_ensemble(projet)"><strong>{{ p.demarrage|tokens }}</strong></td>
+        <td class="nb">{{ p.tokens_actifs|tokens }}</td>
+        <td class="nb">{{ p.tokens_archives|tokens if p.tokens_archives else '—' }}</td>
+        <td>{% if p.resume %}<a href="/doc/{{ p.resume.doc.chemin }}">{{ p.resume.tokens|tokens }}</a>{% elif p.slug != 'general' %}<span class="pastille ko">absente</span>{% else %}—{% endif %}</td>
+        <td>{{ p.maj|date_fr if p.maj else '—' }}</td>
+        <td class="nb">{% if p.alertes %}<a href="#sante-{{ p.slug }}" class="pastille {{ 'ko' if p.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ p.alertes|length }}</a>{% else %}<span class="pastille ok">OK</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Le démarrage est ce que Claude charge au début d'une conversation de projet. Un document n'est ensuite lu que par section, à la demande.</p>
+</section>
+
+<section class="carte" id="usage">
+  <div class="carte-tete">
+    <h2>Usage par Claude</h2>
+    <nav class="filtres">{% for j, lib in [(1,"24 h"),(7,"7 j"),(30,"30 j"),(90,"90 j")] %}<a href="/memoire?jours={{ j }}#usage" class="{{ 'actif' if usage.jours == j }}">{{ lib }}</a>{% endfor %}</nav>
+  </div>
+  {% if not usage.appels %}
+    <p class="note">Aucun appel d'outil MCP enregistré sur la période. Le journal commence au déploiement de cette version.</p>
+  {% else %}
+  <div class="tuiles">
+    <div class="tuile"><span class="tuile-val">{{ usage.tokens|tokens }}</span><span class="tuile-lib">servis à Claude</span></div>
+    <div class="tuile"><span class="tuile-val">{{ usage.appels }}</span><span class="tuile-lib">appels d'outils</span></div>
+    <div class="tuile"><span class="tuile-val">{{ usage.conversations_estimees }}</span><span class="tuile-lib">démarrages (vue_ensemble)</span></div>
+    <div class="tuile"><span class="tuile-val">{{ (usage.tokens // usage.conversations_estimees)|tokens if usage.conversations_estimees else '—' }}</span><span class="tuile-lib">par conversation (moyenne)</span></div>
+  </div>
+  {% if usage.par_jour|length > 1 %}
+  <div class="histo" role="img" aria-label="Tokens servis par jour">
+    {% for jour, v in usage.par_jour %}<div class="histo-barre" title="{{ jour }} : {{ v[1]|tokens }}, {{ v[0]}} appels"><span style="height:{{ (v[1] * 100 // usage.max_jour) if usage.max_jour else 0 }}%"></span></div>{% endfor %}
+  </div>
+  <p class="note">Tokens servis par jour, du {{ usage.par_jour[0][0] }} au {{ usage.par_jour[-1][0] }} (survoler une barre).</p>
+  {% endif %}
+  <div class="grille-usage">
+    <div><h3>Par projet</h3><table class="tableau"><tbody>
+      {% for p, t in usage.par_projet %}<tr><td><a href="/projet/{{ p }}">{{ p }}</a></td><td class="nb">{{ usage.appels_projet[p] }} appels</td><td class="nb">{{ t|tokens }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Par outil</h3><table class="tableau"><tbody>
+      {% for o, t in usage.par_outil %}<tr><td><code>{{ o }}</code></td><td class="nb">{{ t|tokens }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Documents les plus lus</h3><table class="tableau"><tbody>
+      {% for c, t in usage.docs_lus %}<tr><td><a href="/doc/{{ c }}"><code>{{ c }}</code></a></td><td class="nb">{{ t|tokens }}</td></tr>{% else %}<tr><td class="note">—</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Lus en entier <small class="note">(complet=true)</small></h3><table class="tableau"><tbody>
+      {% for c, n in usage.complets %}<tr><td><a href="/doc/{{ c }}"><code>{{ c }}</code></a></td><td class="nb">{{ n }} fois</td></tr>{% else %}<tr><td class="note">Aucun : bon signe.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Recherches sans résultat <small class="note">(trous possibles)</small></h3><table class="tableau"><tbody>
+      {% for q, n in usage.recherches_vides %}<tr><td>« {{ q }} »</td><td class="nb">{{ n }}</td></tr>{% else %}<tr><td class="note">Aucune.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Écritures par auteur</h3><table class="tableau"><tbody>
+      {% for a, n in usage.ecritures %}<tr><td>{{ a }}</td><td class="nb">{{ n }}</td></tr>{% else %}<tr><td class="note">Aucune.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% if usage.erreurs %}
+  <h3>Dernières erreurs d'outils</h3>
+  <ul class="sante">{% for e in usage.erreurs %}<li><span class="note">{{ e.t|date_fr }}</span> <code>{{ e.outil }}</code>{% if e.chemin %} <code>{{ e.chemin }}</code>{% endif %} : {{ e.erreur }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="note">Estimation à 3,5 caractères par token. Le journal ne contient aucun contenu de document (outil, chemin, section, requête, taille, durée) ; conservé 12 mois.</p>
+  {% endif %}
+</section>
+
+<section class="carte">
+  <h2>Santé de la mémoire</h2>
+  {% for p in projets if p.alertes %}
+    <h3 id="sante-{{ p.slug }}" class="sante-projet">{{ p.titre }}</h3>
+    <ul class="sante">
+    {% for a in p.alertes %}
+      <li class="{{ a.niveau }}"><span class="pastille {{ 'ko' if a.niveau == 'important' else 'dispo' }}">{{ 'À corriger' if a.niveau == 'important' else 'Conseil' }}</span>
+        <a href="/doc/{{ a.chemin }}"><code>{{ a.chemin }}</code></a> : {{ a.message }}</li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p><span class="pastille ok">OK</span> Aucun point à signaler.</p>
+  {% endfor %}
+  <p class="note">Contrôles : fiche résumé présente et courte, documents longs découpés en sections, sections de moins de ~3k tokens, pas de dérive en journal (« 🆕 », titres datés, tâches cochées accumulées), renvois entre documents valides. Les archives ne sont pas contrôlées.</p>
+</section>
+
+<section class="carte">
+  <h2>Plus gros documents actifs</h2>
+  <div class="tableau-defile">
+  <table class="tableau">
+    <thead><tr><th>Document</th><th class="nb">Taille</th><th class="nb">Sections</th><th>Plus grosse section (texte propre)</th></tr></thead>
+    <tbody>
+    {% for d in plus_gros %}
+      <tr><td><a href="/doc/{{ d.doc.chemin }}">{{ d.doc.titre }}</a><br><code class="petit">{{ d.doc.chemin }}</code></td>
+        <td class="nb">{{ d.tokens|tokens }}</td><td class="nb">{{ d.sections }}</td>
+        <td>{% if d.plus_grosse %}{{ d.plus_grosse[0][:70] }} <span class="note">({{ d.plus_grosse[1]|tokens }})</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="carte" id="sauvegarde">
+  <h2>Sauvegarde</h2>
+  {% if not sauvegarde.configuree %}
+    <p><span class="pastille ko">Non configurée</span> Aucune copie hors du serveur. Renseigner dans le <code>.env</code> du serveur
+      <code>GIT_REMOTE</code> (adresse d'un dépôt <strong>vide</strong>, sans identifiants), <code>GIT_REMOTE_USER</code> et
+      <code>GIT_REMOTE_TOKEN</code>, puis <code>docker compose up -d</code>.</p>
+    <p><a class="bouton" href="/export">Exporter tout (.zip)</a></p>
+  {% else %}
+    <dl class="maj-versions">
+      <dt>Dépôt</dt><dd><code>{{ sauvegarde.remote }}</code>{% if not sauvegarde.identifiants %} <span class="note">(sans identifiants)</span>{% endif %}</dd>
+      <dt>Planification</dt><dd>chaque nuit à {{ sauvegarde.heure }}</dd>
+      <dt>Dernière tentative</dt><dd>{% if sauvegarde.date %}{{ sauvegarde.date|date_fr }} —
+        {% if sauvegarde.ok %}<span class="pastille ok">réussie</span>{% else %}<span class="pastille ko">échec</span>{% endif %}
+        <span class="note">({{ sauvegarde.commits }} versions, {{ sauvegarde.duree }} s)</span>{% else %}jamais{% endif %}</dd>
+      <dt>Dernière réussite</dt><dd>{{ sauvegarde.derniere_reussite|date_fr if sauvegarde.derniere_reussite else 'jamais' }}
+        {% if sauvegarde.en_retard %}<span class="pastille ko">plus de 26 h</span>{% endif %}</dd>
+    </dl>
+    {% if sauvegarde.date and not sauvegarde.ok %}<p class="alerte"><span>{{ sauvegarde.message }}</span></p>{% endif %}
+    <div class="actions"><form method="post" action="/memoire/sauvegarde"><button>Sauvegarder maintenant</button></form>
+      <a class="bouton" href="/export">Exporter tout (.zip)</a></div>
+    <p class="note">Contenu sauvegardé : les documents et tout leur historique (dépôt Git). Le compte de l'interface n'y est pas (il se recrée).</p>
+  {% endif %}
+</section>
+{% endblock %}

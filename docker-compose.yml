@@ -1,0 +1,63 @@
+# MCP Memory : contexte partagé exposé en MCP + interface web.
+# Les deux conteneurs partagent le volume « contexte-data » (fichiers Markdown + dépôt Git).
+name: mcp-memory
+
+x-commun: &commun
+  build:
+    context: .
+    args:
+      VERSION: ${VERSION:-}   # renseignée par scripts/maj-hote.sh (commit déployé)
+  image: mcp-memory:latest
+  restart: unless-stopped
+  volumes:
+    - contexte-data:/data
+  environment: &env
+    TZ: Europe/Paris
+    GIT_REMOTE: ${GIT_REMOTE:-}
+
+services:
+  mcp:
+    <<: *commun
+    command: python -m app.mcp_server
+    environment:
+      <<: *env
+      MCP_TOKEN: ${MCP_TOKEN:?Définir MCP_TOKEN dans .env}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-}
+      OAUTH_PASSWORD: ${OAUTH_PASSWORD:-}
+      OAUTH_REDIRECTS: ${OAUTH_REDIRECTS:-}
+    ports:
+      - "${BIND_IP:-0.0.0.0}:8765:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/sante')"]
+      interval: 60s
+      timeout: 5s
+
+  web:
+    <<: *commun
+    command: python -m app.web
+    environment:
+      <<: *env
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-}
+      # Sauvegarde nocturne du contexte (dépôt Git distant), voir app/sauvegarde.py
+      GIT_REMOTE_USER: ${GIT_REMOTE_USER:-}
+      GIT_REMOTE_TOKEN: ${GIT_REMOTE_TOKEN:-}
+      SAUVEGARDE_HEURE: ${SAUVEGARDE_HEURE:-03:15}
+    # Si le nom du dépôt n'est résolu que par le DNS du réseau local (ex. git.maison.lan)
+    extra_hosts:
+      - "${GIT_REMOTE_HOST:-localhost}:${GIT_REMOTE_HOST_IP:-127.0.0.1}"
+    volumes:
+      - contexte-data:/data
+      # Échange avec le service hôte de mise à jour (scripts/installer-maj.sh) :
+      # l'interface y dépose une demande et lit l'état ; aucun accès à Docker ni au dépôt.
+      - ./.maj:/maj
+    ports:
+      - "${BIND_IP:-0.0.0.0}:8766:8766"
+    depends_on:
+      - mcp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/sante')"]
+      interval: 60s
+      timeout: 5s
+
+volumes:
+  contexte-data:

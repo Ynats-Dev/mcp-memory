@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block titre %}{{ projet.titre }} — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane"><a href="/">Accueil</a><span>/</span><span>{{ projet.titre }}</span></nav>
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+
+<header class="page-tete">
+  <div class="tete-projet">
+    <span class="pastille-projet grande" aria-hidden="true">{{ projet.titre[:1]|upper }}</span>
+    <div>
+      <h1>{{ projet.titre }}</h1>
+      {% if projet.description %}<p class="sous">{{ projet.description }}</p>{% endif %}
+      {% if info and info.docs %}
+      <div class="metriques">
+        <span><strong>{{ actifs|length + (1 if resume else 0) }}</strong> document{{ 's' if actifs|length + (1 if resume else 0) > 1 }}{% if archives %} · {{ archives|length }} archive{{ 's' if archives|length > 1 }}{% endif %}</span>
+        <span title="Ce que Claude charge au début d'une conversation">Démarrage : <strong>{{ info.demarrage|tokens }}</strong></span>
+        {% if info.alertes %}<a href="/memoire#sante-{{ projet.slug }}" class="pastille {{ 'ko' if info.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ info.alertes|length }} point{{ 's' if info.alertes|length > 1 }} de santé</a>{% else %}<span class="pastille ok">Santé OK</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <details class="deroulant">
+      <summary class="bouton">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/></svg>Fichier pour Claude</summary>
+      <form method="get" action="/claude/fichier" class="deroulant-panneau formulaire">
+        <input type="hidden" name="categorie" value="{{ projet.slug }}">
+        <p class="note">À déposer dans le <strong>Contexte</strong> du projet Claude, à la place des anciens fichiers.</p>
+        <label class="case"><input type="radio" name="autonome" value="1" checked>
+          Claude met le contexte à jour tout seul</label>
+        <label class="case"><input type="radio" name="autonome" value="">
+          Claude propose et attend mon accord</label>
+        <div class="actions">
+          <button class="primaire">Télécharger</button>
+          <button class="lien petit" formaction="/claude#apercu" name="apercu" value="1">Aperçu</button>
+        </div>
+      </form>
+    </details>
+    <details class="deroulant menu-plus">
+      <summary class="bouton" aria-label="Plus d'actions">
+        <svg viewBox="0 0 24 24" class="ic"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg>Plus</summary>
+      <div class="deroulant-panneau liste-actions">
+        <label for="depot-fichiers" class="action"><svg viewBox="0 0 24 24" class="ic"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>Importer des fichiers .md
+          <small>ou glisser-déposer n'importe où sur la page</small></label>
+        <label class="case action-case"><input type="checkbox" id="depot-remplacer"> remplacer les documents existants</label>
+        {% if projet.nb %}<a class="action" href="/projet/{{ projet.slug }}/export"><svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Exporter en .zip
+          <small>tous les documents, archives comprises</small></a>{% endif %}
+        <a class="action" href="/projet/{{ projet.slug }}/modifier"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Renommer, décrire le projet</a>
+        {% if not projet.nb %}
+        <form method="post" action="/projet/{{ projet.slug }}/supprimer" onsubmit="return confirm('Supprimer ce projet vide ?')">
+          <button class="action danger"><svg viewBox="0 0 24 24" class="ic"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Supprimer le projet</button></form>
+        {% endif %}
+      </div>
+    </details>
+    <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouveau document</a>
+  </div>
+</header>
+
+<form class="depot" id="depot" data-url="/projet/{{ projet.slug }}/importer">
+  <input type="file" id="depot-fichiers" accept=".md,.markdown,text/markdown" multiple hidden>
+  <ul class="depot-resultats" id="depot-resultats" hidden></ul>
+  <div class="depot-voile" id="depot-voile" aria-hidden="true">
+    <div class="depot-cadre">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>
+      <strong>Déposer pour importer dans « {{ projet.titre }} »</strong>
+      <small>fichiers .md · « serveur nas_0145.md » → {{ projet.slug }}/serveur-nas</small>
+    </div>
+  </div>
+</form>
+
+{% macro ligne_doc(i) %}
+  <a class="ligne ligne-doc-projet" href="/doc/{{ i.doc.chemin }}">
+    <span class="ligne-titre">{{ i.doc.titre }}
+      {% for t in i.doc.tags if t not in (projet.slug, 'archive') %}<span class="tag">{{ t }}</span>{% endfor %}</span>
+    <span class="ligne-meta">
+      <span title="Sections lisibles séparément">{{ i.sections }} section{{ 's' if i.sections > 1 }}</span>
+      <span class="ligne-taille">{{ i.tokens|tokens }}</span>
+      <span>{{ i.doc.maj|date_fr(false) }}</span>
+    </span>
+  </a>
+{% endmacro %}
+
+{% if resume %}
+<section class="fiche-resume">
+  <div class="titre-bloc">
+    <h2><svg viewBox="0 0 24 24" class="ic"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5M9 8h3"/></svg>Fiche résumé
+      <span class="note">· ce que Claude lit en premier · {{ resume.tokens|tokens }}</span></h2>
+    <a class="lien petit" href="/editer/{{ resume.doc.chemin }}">Modifier</a>
+  </div>
+  <div class="fiche-resume-corps prose" id="fiche-resume">{{ resume.doc.contenu|sans_titre(resume.doc.titre)|markdown|cases|liens_documents|safe }}</div>
+  <button type="button" class="lien petit deplier" id="deplier-fiche">Afficher toute la fiche</button>
+</section>
+{% elif docs %}
+<p class="alerte"><span>Ce projet n'a pas de fiche résumé : <code>vue_ensemble</code> n'a rien à présenter à Claude en tête de conversation.
+  <a href="/nouveau?projet={{ projet.slug }}">Créer <code>{{ projet.slug }}/resume</code></a></span></p>
+{% endif %}
+
+{% if actifs %}
+<section class="bloc">
+  <div class="titre-bloc"><h2>Documents <span class="n">{{ actifs|length }}</span></h2></div>
+  <div class="liste-lignes">{% for i in actifs %}{{ ligne_doc(i) }}{% endfor %}</div>
+</section>
+{% endif %}
+
+{% if archives %}
+<details class="bloc archives">
+  <summary class="titre-bloc"><h2>Archives <span class="n">{{ archives|length }}</span></h2>
+    <span class="note">journaux et anciennes versions, lus par Claude seulement sur demande · {{ info.tokens_archives|tokens }}</span></summary>
+  <div class="liste-lignes">{% for i in archives %}{{ ligne_doc(i) }}{% endfor %}</div>
+</details>
+{% endif %}
+
+{% if not docs %}
+<div class="vide">
+  <span class="icone"><svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></span>
+  <h2>Projet vide</h2>
+  <p>Créez un document ici, déplacez-y un document existant (bouton « Déplacer » sur sa page),
+     ou glissez des fichiers .md sur cette page.</p>
+  <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}">Nouveau document</a>
+</div>
+{% endif %}
+<script>
+// Glisser-déposer de fichiers Markdown : envoi groupé, résultat par fichier, puis rechargement.
+(function () {
+  var form = document.getElementById("depot"), zone = document.getElementById("depot-voile"),
+      champ = document.getElementById("depot-fichiers"), liste = document.getElementById("depot-resultats"),
+      compteur = 0;
+  function envoyer(fichiers) {
+    fichiers = Array.prototype.filter.call(fichiers, function (f) { return f.size >= 0; });
+    if (!fichiers.length) return;
+    var donnees = new FormData();
+    fichiers.forEach(function (f) { donnees.append("fichiers", f, f.name); });
+    if (document.getElementById("depot-remplacer").checked) donnees.append("remplacer", "1");
+    form.classList.add("envoi");
+    liste.hidden = false;
+    liste.innerHTML = "<li>Envoi de " + fichiers.length + " fichier(s)…</li>";
+    fetch(form.dataset.url, {method: "POST", body: donnees})
+      .then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw new Error(e.detail || r.status); }); })
+      .then(function (d) {
+        var ok = 0;
+        liste.innerHTML = "";
+        d.resultats.forEach(function (r) {
+          var li = document.createElement("li"), bon = r.etat === "créé" || r.etat === "mis à jour";
+          if (bon) ok++;
+          li.className = bon ? "ok" : (r.etat === "ignoré" ? "ignore" : "ko");
+          li.textContent = r.fichier + " → " + (r.chemin || "") + " : " + r.etat + (r.detail ? " (" + r.detail + ")" : "");
+          liste.appendChild(li);
+        });
+        if (ok) {
+          var li = document.createElement("li");
+          li.innerHTML = '<a href="">Actualiser la liste</a>';
+          liste.appendChild(li);
+        }
+      })
+      .catch(function (e) { liste.innerHTML = '<li class="ko">Échec de l\'envoi : ' + e.message + "</li>"; })
+      .finally(function () { form.classList.remove("envoi"); champ.value = ""; });
+  }
+  champ.addEventListener("change", function () { envoyer(champ.files); });
+  var fiche = document.getElementById("fiche-resume"), deplier = document.getElementById("deplier-fiche");
+  if (fiche && deplier) {
+    if (fiche.scrollHeight <= fiche.clientHeight + 4) deplier.hidden = true;
+    deplier.addEventListener("click", function () {
+      var ouvert = fiche.classList.toggle("ouverte");
+      deplier.textContent = ouvert ? "Réduire" : "Afficher toute la fiche";
+    });
+  }
+  function avecFichiers(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, "Files") >= 0; }
+  document.addEventListener("dragenter", function (e) {
+    if (!avecFichiers(e)) return;
+    e.preventDefault(); compteur++; zone.classList.add("survol");
+  });
+  document.addEventListener("dragleave", function () { if (--compteur <= 0) { compteur = 0; zone.classList.remove("survol"); } });
+  document.addEventListener("dragover", function (e) { e.preventDefault(); });
+  document.addEventListener("drop", function (e) {
+    e.preventDefault(); compteur = 0; zone.classList.remove("survol");
+    if (e.dataTransfer && e.dataTransfer.files.length) envoyer(e.dataTransfer.files);
+  });
+})();
+</script>
+{% endblock %}

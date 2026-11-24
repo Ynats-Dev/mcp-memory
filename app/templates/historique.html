@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}Historique — MCP Memory{% endblock %}
+{% block contenu %}
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Toutes les modifications</p>
+    <h1>Historique</h1>
+    <p class="sous">{{ revisions|length }} version{{ 's' if revisions|length > 1 }}</p>
+  </div>
+</header>
+
+<div class="journal">
+{% set ns = namespace(jour='') %}
+{% for r in revisions %}
+  {% set jour = r.date|date_fr(false) %}
+  {% if jour != ns.jour %}{% set ns.jour = jour %}<div class="jour">{{ jour }}</div>{% endif %}
+  <a class="ligne" href="/commit/{{ r.sha }}">
+    <span class="sha">{{ r.sha }}</span>
+    <span class="msg">{{ r.message }}</span>
+    <span class="qui">{{ r.auteur }} · {{ r.date[11:16] }}</span>
+  </a>
+{% endfor %}
+</div>
+{% endblock %}

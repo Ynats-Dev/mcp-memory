@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>{{ 'Créer le compte' if mode == 'installation' else 'Connexion' }} — MCP Memory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c1e'/%3E%3Cpath d='M9 11l7-4 7 4v10l-7 4-7-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css?v=10">
+</head>
+<body class="page-auth">
+<main class="auth">
+  <div class="marque">
+    <span class="logo"><svg viewBox="0 0 24 24" class="ic"><path d="M5 8l7-4 7 4v8l-7 4-7-4z"/><path d="M5 8l7 4 7-4M12 12v8"/></svg></span>
+    MCP Memory
+  </div>
+  <form method="post" class="carte formulaire auth-carte" action="/{{ mode }}">
+    {% if mode == 'installation' %}
+      <h1>Créer le compte</h1>
+      <p class="note">Première ouverture de l'interface : choisissez l'identifiant et le mot de passe
+         qui protégeront l'accès. Le mot de passe est stocké haché sur le serveur.</p>
+    {% else %}
+      <h1>Connexion</h1>
+      <input type="hidden" name="suite" value="{{ suite }}">
+    {% endif %}
+    {% if erreur %}<p class="alerte">{{ erreur }}</p>{% endif %}
+    <label>Identifiant
+      <input name="identifiant" value="{{ identifiant }}" autocomplete="username" autocapitalize="none"
+             spellcheck="false" required {{ 'autofocus' if not identifiant }}></label>
+    <label>Mot de passe
+      <input type="password" name="mdp" required {{ 'autofocus' if identifiant }}
+             autocomplete="{{ 'new-password' if mode == 'installation' else 'current-password' }}"
+             {% if mode == 'installation' %}minlength="10"{% endif %}></label>
+    {% if mode == 'installation' %}
+      <label>Confirmation
+        <input type="password" name="confirmation" autocomplete="new-password" minlength="10" required></label>
+      <button class="primaire">Créer le compte</button>
+    {% else %}
+      <label class="case"><input type="checkbox" name="souvenir" value="1" checked> Rester connecté 30 jours</label>
+      <button class="primaire">Se connecter</button>
+    {% endif %}
+  </form>
+</main>
+</body>
+</html>

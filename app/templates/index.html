@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block contenu %}
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+
+{% if not total and not projets %}
+  <div class="vide">
+    <span class="icone"><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg></span>
+    <h2>Le contexte est vide</h2>
+    <p>Commencez par créer un projet : il regroupe les documents d'un même sujet
+       et sert de périmètre au fichier de projet pour Claude.</p>
+    <a class="bouton primaire" href="/projets/nouveau">Créer un projet</a>
+  </div>
+{% else %}
+
+<section class="bienvenue">
+  <div>
+    <p class="surtitre">MCP Memory</p>
+    <h1>Que cherchez-vous ?</h1>
+  </div>
+  <form action="/" method="get" class="grande-recherche" role="search">
+    <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+    <input type="search" name="q" placeholder="Un serveur, une adresse IP, une commande…" aria-label="Rechercher dans tous les documents" autofocus>
+    <button class="primaire">Rechercher</button>
+  </form>
+</section>
+
+<div class="titre-bloc">
+  <h2>Projets <span class="n">{{ projets|length }}</span></h2>
+  <div class="actions">
+    <a class="bouton" href="/projets/nouveau"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouveau projet</a>
+  </div>
+</div>
+
+<div class="grille-projets" id="grille-projets">
+{% for p in projets %}
+  {% set i = infos.get(p.slug) %}
+  {% set nb_actifs = i.actifs|length if i else 0 %}
+  {% set nb_archives = (i.docs|length - nb_actifs) if i else 0 %}
+  <article class="carte-projet" id="cat-{{ p.slug }}">
+    <a class="carte-projet-lien" href="/projet/{{ p.slug }}">
+      <span class="pastille-projet grande" aria-hidden="true">{{ p.titre[:1]|upper }}</span>
+      <span>
+        <span class="carte-projet-titre">{{ p.titre }}</span>
+        <span class="carte-projet-desc">{{ p.description or (i.resume.doc.contenu|apercu if i and i.resume else 'Aucune description') }}</span>
+      </span>
+    </a>
+    <dl class="carte-projet-stats">
+      <div><dt>Documents</dt><dd>{{ nb_actifs }}{% if nb_archives %} <span class="note">+ {{ nb_archives }} archive{{ 's' if nb_archives > 1 }}</span>{% endif %}</dd></div>
+      <div><dt>Démarrage</dt><dd title="Ce que Claude charge au début d'une conversation de ce projet">{{ i.demarrage|tokens if i and i.docs else '—' }}</dd></div>
+      <div><dt>Modifié</dt><dd>{{ i.maj|date_fr(false) if i and i.maj else '—' }}</dd></div>
+    </dl>
+    <div class="carte-projet-pied">
+      {% if i and i.alertes %}
+        <a href="/memoire#sante-{{ p.slug }}" class="pastille {{ 'ko' if i.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ i.alertes|length }} point{{ 's' if i.alertes|length > 1 }} de santé</a>
+      {% elif i and i.docs %}<span class="pastille ok">Santé OK</span>
+      {% else %}<span class="pastille">Vide</span>{% endif %}
+      <a class="lien petit" href="/nouveau?projet={{ p.slug }}">+ Document</a>
+    </div>
+  </article>
+{% endfor %}
+</div>
+
+{% if sans_projet %}
+<section class="bloc" id="sans-projet">
+  <div class="titre-bloc"><h2>Sans projet <span class="n">{{ sans_projet|length }}</span></h2></div>
+  <p class="note">Ouvrir un document puis « Déplacer » pour le ranger dans un projet.</p>
+  <div class="liste-lignes">
+    {% for d in sans_projet %}<a class="ligne" href="/doc/{{ d.chemin }}"><span class="ligne-titre">{{ d.titre }}</span><span class="ligne-meta">{{ d.maj|date_fr(false) }}</span></a>{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="deux-colonnes">
+  <section class="bloc">
+    <div class="titre-bloc"><h2>Modifiés récemment</h2></div>
+    <div class="liste-lignes">
+    {% for d in recents %}
+      <a class="ligne" href="/doc/{{ d.chemin }}">
+        <span class="ligne-titre">{{ d.titre }}</span>
+        <span class="ligne-meta"><span class="tag">{{ titres.get(d.categorie, 'Sans projet') }}</span> {{ d.maj|date_fr }}</span>
+      </a>
+    {% endfor %}
+    </div>
+  </section>
+  <section class="bloc">
+    <div class="titre-bloc"><h2>Activité</h2><a class="lien petit" href="/historique">Tout l'historique →</a></div>
+    <ol class="fil">
+    {% for r in activite %}
+      <li><a href="/commit/{{ r.sha }}">{{ r.message }}</a>
+        <span class="quand">{{ r.auteur }} · {{ r.date|date_fr }}</span></li>
+    {% endfor %}
+    </ol>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}{% if doc %}Modifier « {{ doc.titre }} »{% else %}Nouveau document{% endif %} — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane">
+  <a href="/">Accueil</a><span>/</span>
+  {% if doc %}<a href="/doc/{{ doc.chemin }}">{{ doc.titre }}</a><span>/</span><span>Modifier</span>{% else %}<span>Nouveau</span>{% endif %}
+</nav>
+<header class="page-tete">
+  <h1>{% if doc %}Modifier « {{ doc.titre }} »{% else %}Nouveau document{% endif %}</h1>
+</header>
+
+<form method="post" action="/enregistrer" class="edition">
+  <input type="hidden" name="base" value="{{ base }}">
+  {% if erreur_secret %}
+  <div class="alerte"><span>{{ erreur_secret }}</span>
+    <label class="case"><input type="checkbox" name="autoriser_secrets" value="1"> Enregistrer quand même (faux positif)</label></div>
+  {% endif %}
+  <div class="champs {{ 'quatre' if not doc }}">
+    {% if doc %}
+    <label>Chemin <small>changer : bouton « Déplacer » du document</small>
+      <input name="chemin" value="{{ doc.chemin }}" readonly></label>
+    {% else %}
+    <label>Projet <small>dossier du document</small>
+      <select name="projet">
+        <option value="">— Sans projet —</option>
+        {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if p.slug == projet }}>{{ p.titre }}</option>{% endfor %}
+      </select></label>
+    <label>Nom <small>minuscules, chiffres, tirets</small>
+      <input name="nom" required pattern="[a-z0-9][a-z0-9\-]*" placeholder="serveur-nas" autofocus></label>
+    {% endif %}
+    <label>Titre <small>par défaut : premier « # »</small>
+      <input name="titre" value="{{ doc.titre if doc else '' }}"></label>
+    <label>Tags <small>séparés par des virgules</small>
+      <input name="tags" value="{{ doc.tags|join(', ') if doc else '' }}"></label>
+  </div>
+  <label>Contenu <small>Markdown</small>
+    <textarea name="contenu" rows="26" spellcheck="false">{{ doc.contenu if doc else '' }}</textarea></label>
+  <label>Message <small>ce qui change et pourquoi</small>
+    <input name="message" value="{{ message_saisi|default('') }}"></label>
+  <div class="barre-actions">
+    <button class="primaire">Enregistrer</button>
+    <a class="lien" href="{{ '/doc/' ~ doc.chemin if doc else ('/projet/' ~ projet if projet else '/') }}">Annuler</a>
+  </div>
+</form>
+{% endblock %}

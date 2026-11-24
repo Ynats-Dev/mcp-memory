@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}Version {{ sha }} — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane"><a href="/historique">Historique</a><span>/</span><span>{{ sha }}</span></nav>
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Version</p>
+    <h1><code>{{ sha }}</code></h1>
+  </div>
+</header>
+<pre class="diff">{% for l in diff.splitlines() %}<span class="{% if l.startswith('+++') or l.startswith('---') or l.startswith('diff ') or l.startswith('index ') %}entete{% elif l.startswith('+') %}plus{% elif l.startswith('-') %}moins{% elif l.startswith('@@') %}bloc{% endif %}">{{ l }}</span>{% endfor %}</pre>
+{% endblock %}

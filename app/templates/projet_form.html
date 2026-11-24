@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block largeur %}etroit{% endblock %}
+{% block titre %}{% if projet %}Modifier « {{ projet.titre }} »{% else %}Nouveau projet{% endif %} — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane">
+  <a href="/">Accueil</a><span>/</span>
+  {% if projet %}<a href="/projet/{{ projet.slug }}">{{ projet.titre }}</a><span>/</span><span>Modifier</span>{% else %}<span>Nouveau projet</span>{% endif %}
+</nav>
+<header class="page-tete">
+  <h1>{% if projet %}Modifier le projet{% else %}Nouveau projet{% endif %}</h1>
+</header>
+
+<form method="post" class="carte formulaire"
+      action="{{ '/projet/' ~ projet.slug ~ '/modifier' if projet else '/projets/creer' }}">
+  <label>Nom du projet
+    <input name="titre" id="titre" value="{{ projet.titre if projet else '' }}" placeholder="Maison" required autofocus></label>
+  <label>Identifiant <small class="note">minuscules, chiffres, tirets — préfixe des documents (« maison/serveur-nas »)</small>
+    <input name="{{ 'nouveau_slug' if projet else 'slug' }}" id="slug" value="{{ projet.slug if projet else '' }}"
+           placeholder="maison" pattern="[a-z0-9][a-z0-9\-]*" required></label>
+  {% if projet and projet.nb %}
+  <p class="note">Changer l'identifiant déplace les {{ projet.nb }} document(s) du projet ; leur historique est conservé.
+     Pensez à régénérer le fichier pour Claude.</p>
+  {% endif %}
+  <label>Description <small class="note">facultative</small>
+    <textarea name="description" rows="3" style="min-height:0;font-family:inherit;font-size:inherit">{{ projet.description if projet else '' }}</textarea></label>
+  <div class="actions">
+    <button class="primaire">{% if projet %}Enregistrer{% else %}Créer le projet{% endif %}</button>
+    <a class="lien" href="{{ '/projet/' ~ projet.slug if projet else '/' }}">Annuler</a>
+  </div>
+</form>
+
+{% if not projet %}
+<script>
+// Propose un identifiant à partir du nom tant qu'il n'a pas été modifié à la main.
+(function () {
+  var titre = document.getElementById("titre"), slug = document.getElementById("slug"), manuel = false;
+  slug.addEventListener("input", function () { manuel = true; });
+  titre.addEventListener("input", function () {
+    if (manuel) return;
+    slug.value = titre.value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/['’]s\b/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

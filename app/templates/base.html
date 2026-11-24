@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{% block titre %}MCP Memory{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c1e'/%3E%3Cpath d='M9 11l7-4 7 4v10l-7 4-7-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css?v=21">
+</head>
+{% set ici = request.url.path %}
+<body>
+<div class="app">
+  <aside class="barre">
+    <a class="marque" href="/">
+      <span class="logo"><svg viewBox="0 0 24 24" class="ic"><path d="M5 8l7-4 7 4v8l-7 4-7-4z"/><path d="M5 8l7 4 7-4M12 12v8"/></svg></span>
+      MCP Memory
+    </a>
+
+    <form action="/" method="get" class="recherche">
+      <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" name="q" value="{{ q|default('') }}" placeholder="Rechercher…" aria-label="Rechercher">
+    </form>
+
+    <nav class="menu">
+      <a href="/" class="{{ 'actif' if ici == '/' }}">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M4 11l8-6.5 8 6.5M6 9.5V20h12V9.5"/></svg><span class="lib">Accueil</span></a>
+    </nav>
+
+    {% set nav = navigation() %}
+    <div class="menu-titre">Projets
+      <a class="ajout" href="/projets/nouveau" title="Nouveau projet" aria-label="Nouveau projet">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></a></div>
+    <nav class="menu cats" id="nav-projets">
+      {% for p in nav.projets %}
+      <a href="/projet/{{ p.slug }}" draggable="true" data-slug="{{ p.slug }}" title="{{ p.titre }} — glisser pour réordonner" class="projet-nav {{ 'actif' if ici == '/projet/' ~ p.slug or ici.startswith('/projet/' ~ p.slug ~ '/') or ici.startswith('/doc/' ~ p.slug ~ '/') or ici.startswith('/editer/' ~ p.slug ~ '/') }}">
+        <span class="pastille-projet" aria-hidden="true">{{ p.titre[:1]|upper }}</span>
+        <span class="lib-projet">{{ p.titre }}</span><span class="compte">{{ p.nb }}</span></a>
+      {% else %}
+      <a href="/projets/nouveau" class="vide-nav">Créer un premier projet</a>
+      {% endfor %}
+      {% if nav.sans_projet %}
+      <a href="/#sans-projet"><span class="pastille-projet" aria-hidden="true">·</span>
+        <span class="lib-projet">Sans projet</span><span class="compte">{{ nav.sans_projet }}</span></a>
+      {% endif %}
+    </nav>
+
+    <div class="menu-titre menu-titre-outils">Outils</div>
+    <nav class="menu outils">
+      <a href="/memoire" class="{{ 'actif' if ici == '/memoire' }}">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span class="lib">Mémoire</span></a>
+      <a href="/historique" class="{{ 'actif' if ici == '/historique' or ici.startswith('/commit/') }}">
+        <svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="lib">Historique</span></a>
+      <a href="/claude" class="{{ 'actif' if ici.startswith('/claude') }}">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/></svg><span class="lib">Connexion Claude</span></a>
+      <a href="/mise-a-jour" class="{{ 'actif' if ici == '/mise-a-jour' }}">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg><span class="lib">Mise à jour</span>
+        {% if maj_disponible() %}<span class="point-maj" title="Mise à jour disponible"></span>{% endif %}</a>
+    </nav>
+
+    {% set moi = utilisateur_courant(request) %}
+    {% if moi %}
+    <div class="session">
+      <a href="/compte" class="{{ 'actif' if ici == '/compte' }}" title="Mon compte">
+        <span class="avatar">{{ moi[:1]|upper }}</span><span class="lib">{{ moi }}</span></a>
+      <form method="post" action="/deconnexion">
+        <button class="icone-seule" title="Se déconnecter" aria-label="Se déconnecter">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10"/></svg></button></form>
+    </div>
+    {% endif %}
+  </aside>
+
+  <main class="contenu {% block largeur %}{% endblock %}">
+  {% block contenu %}{% endblock %}
+  </main>
+</div>
+<script>
+// Glisser-déposer des projets dans la barre latérale : l'ordre est enregistré au lâcher.
+(function () {
+  var nav = document.getElementById("nav-projets");
+  if (!nav) return;
+  var tire = null, avant = "";
+  function ordre() {
+    return Array.prototype.map.call(nav.querySelectorAll("a[data-slug]"), function (a) { return a.dataset.slug; });
+  }
+  nav.addEventListener("dragstart", function (e) {
+    tire = e.target.closest && e.target.closest("a[data-slug]");
+    if (!tire) return;
+    avant = ordre().join(",");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", tire.dataset.slug);
+    setTimeout(function () { tire && tire.classList.add("en-deplacement"); }, 0);
+  });
+  nav.addEventListener("dragover", function (e) {
+    if (!tire) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    var cible = e.target.closest && e.target.closest("a[data-slug]");
+    if (!cible || cible === tire) return;
+    var r = cible.getBoundingClientRect();
+    nav.insertBefore(tire, e.clientY > r.top + r.height / 2 ? cible.nextSibling : cible);
+  });
+  nav.addEventListener("drop", function (e) { if (tire) e.preventDefault(); });
+  nav.addEventListener("dragend", function () {
+    if (!tire) return;
+    tire.classList.remove("en-deplacement");
+    tire = null;
+    var slugs = ordre();
+    if (slugs.join(",") === avant) return;
+    // Page d'accueil : suit le nouvel ordre sans recharger.
+    slugs.forEach(function (s) {
+      var sec = document.getElementById("cat-" + s);
+      if (sec) sec.parentNode.appendChild(sec);
+    });
+    fetch("/projets/ordre", {method: "POST", headers: {"Content-Type": "application/json"},
+                             body: JSON.stringify({ordre: slugs})})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); })
+      .catch(function () { alert("L'ordre des projets n'a pas pu être enregistré."); location.reload(); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "id": "contexte-jeton",
+      "type": "promptString",
+      "description": "Jeton du serveur MCP mcp-memory (MCP_TOKEN)",
+      "password": true
+    }
+  ],
+  "servers": {
+    "mcp-memory": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:contexte-jeton}"
+      }
+    }
+  }
+}

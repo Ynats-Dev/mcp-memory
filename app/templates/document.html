@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block largeur %}large-doc{% endblock %}
+{% block titre %}{{ doc.titre }} — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane">
+  <a href="/">Accueil</a><span>/</span>
+  {% if projet %}<a href="/projet/{{ projet.slug }}">{{ projet.titre }}</a>{% else %}<span>Sans projet</span>{% endif %}
+</nav>
+
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+{% if version %}
+  <div class="alerte">
+    <span>Vous consultez l'ancienne version <code>{{ version }}</code>. <a href="/doc/{{ doc.chemin }}">Voir la version actuelle</a></span>
+    <form method="post" action="/restaurer/{{ doc.chemin }}"><input type="hidden" name="version" value="{{ version }}">
+      <button class="primaire">Restaurer cette version</button></form>
+  </div>
+{% elif 'archive' in doc.tags %}
+  <div class="bandeau-archive">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M4 7h16v3H4zM5 10v9h14v-9M10 14h4"/></svg>
+    <span><strong>Archive.</strong> Journal ou ancienne version conservé pour mémoire : Claude ne le lit que sur demande
+      et la recherche l'ignore par défaut. L'état actuel est dans les autres documents du projet.</span>
+  </div>
+{% endif %}
+
+<header class="page-tete tete-doc">
+  <div>
+    <h1>{{ doc.titre }}</h1>
+    <div class="meta-doc">
+      <button type="button" class="chemin-copiable" data-copie="{{ doc.chemin }}" title="Copier le chemin (pour Claude)"><code>{{ doc.chemin }}</code>
+        <svg viewBox="0 0 24 24" class="ic"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 0 1 1-1h9"/></svg></button>
+      <span>{{ taille|tokens }}</span>
+      {% if sommaire %}<span>{{ sommaire|length }} section{{ 's' if sommaire|length > 1 }}</span>{% endif %}
+      <span>modifié le {{ doc.maj|date_fr }}</span>
+      {% for t in doc.tags if t != doc.categorie %}<span class="tag">{{ t }}</span>{% endfor %}
+    </div>
+  </div>
+  {% if not version %}
+  <div class="actions">
+    <details class="deroulant menu-plus">
+      <summary class="bouton" aria-label="Plus d'actions">
+        <svg viewBox="0 0 24 24" class="ic"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg>Plus</summary>
+      <div class="deroulant-panneau liste-actions">
+        <details class="sous-action">
+          <summary class="action"><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M10 13.5h5M13 11l2.5 2.5L13 16"/></svg>Déplacer ou renommer</summary>
+          <form method="post" action="/deplacer/{{ doc.chemin }}" class="formulaire">
+            <label>Projet
+              <select name="projet">
+                <option value="" {{ 'selected' if not projet }}>— Sans projet —</option>
+                {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if projet and p.slug == projet.slug }}>{{ p.titre }}</option>{% endfor %}
+              </select></label>
+            <label>Nom <small class="note">minuscules, chiffres, tirets</small>
+              <input name="nom" value="{{ doc.chemin.split('/')[-1] }}" pattern="[a-z0-9][a-z0-9\-]*" required></label>
+            <div class="actions"><button class="primaire">Déplacer</button></div>
+            <p class="note">L'historique suit le document.</p>
+          </form>
+        </details>
+        <a class="action" href="#versions"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Versions précédentes
+          <small>{{ revisions|length }} version{{ 's' if revisions|length > 1 }}</small></a>
+        <form method="post" action="/supprimer/{{ doc.chemin }}" onsubmit="return confirm('Supprimer ce document ? Il restera récupérable dans l\'historique.')">
+          <button class="action danger"><svg viewBox="0 0 24 24" class="ic"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Supprimer
+            <small>récupérable dans l'historique</small></button></form>
+      </div>
+    </details>
+    <a class="bouton primaire" href="/editer/{{ doc.chemin }}">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Modifier</a>
+  </div>
+  {% endif %}
+</header>
+
+<div class="barre-trouve" id="barre-trouve" hidden>
+  <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+  <span id="trouve-etat"></span>
+  <button type="button" id="trouve-prec" aria-label="Occurrence précédente">↑</button>
+  <button type="button" id="trouve-suiv" aria-label="Occurrence suivante">↓</button>
+  <a class="lien petit" id="trouve-fermer" href="">Effacer</a>
+</div>
+
+<div class="doc-mise-en-page {{ 'sans-sommaire' if sommaire|length < 2 }}">
+  {% if sommaire|length >= 2 %}
+  <nav class="sommaire" aria-label="Sommaire">
+    <p class="sommaire-titre">Sommaire</p>
+    <ol>
+    {% set base = sommaire|map(attribute=1)|min %}
+    {% for n, niveau, titre, tokens in sommaire %}
+      <li class="niv-{{ niveau - base }}"><a href="#s-{{ n }}"><span>{{ titre }}</span><span class="sommaire-taille">{{ tokens|tokens|replace(' tokens','') }}</span></a></li>
+    {% endfor %}
+    </ol>
+  </nav>
+  {% endif %}
+  <article class="prose carte-lecture">{{ doc.contenu|sans_titre(doc.titre)|markdown|ancres_titres|cases|liens_documents|safe }}</article>
+</div>
+
+<details class="bloc versions" id="versions">
+  <summary class="titre-bloc"><h2>Versions <span class="n">{{ revisions|length }}</span></h2><span class="note">chaque modification est conservée</span></summary>
+  <ol class="fil">
+  {% for r in revisions %}
+    <li><a href="/doc/{{ doc.chemin }}?version={{ r.sha }}">{{ r.message }}</a>
+      <span class="quand"><a class="sha" href="/commit/{{ r.sha }}" style="display:inline">{{ r.sha }}</a> · {{ r.auteur }} · {{ r.date|date_fr }}</span></li>
+  {% endfor %}
+  </ol>
+</details>
+
+<script>
+// Arrivée depuis la recherche (?q=) : surligner les occurrences, sans tenir compte des accents ni de la casse.
+(function () {
+  var q = new URLSearchParams(location.search).get("q");
+  var article = document.querySelector(".carte-lecture");
+  if (!q || !article) return;
+  function plier(c) { var p = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); return p.length === 1 ? p : c.toLowerCase(); }
+  var termes = plier(q).split(/\s+/).filter(Boolean).map(function (t) { return Array.from(t).map(plier).join(""); });
+  var noeuds = [], parcours = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+  while (parcours.nextNode()) noeuds.push(parcours.currentNode);
+  noeuds.forEach(function (n) {
+    var txt = n.nodeValue, plie = Array.from(txt).map(plier).join("");
+    if (plie.length !== txt.length) return;
+    var zones = [];
+    termes.forEach(function (t) { var i = plie.indexOf(t); while (i >= 0) { zones.push([i, i + t.length]); i = plie.indexOf(t, i + t.length); } });
+    if (!zones.length) return;
+    zones.sort(function (a, b) { return a[0] - b[0]; });
+    var frag = document.createDocumentFragment(), cur = 0;
+    zones.forEach(function (z) {
+      if (z[0] < cur) return;
+      frag.appendChild(document.createTextNode(txt.slice(cur, z[0])));
+      var m = document.createElement("mark"); m.className = "trouve"; m.textContent = txt.slice(z[0], z[1]); frag.appendChild(m);
+      cur = z[1];
+    });
+    frag.appendChild(document.createTextNode(txt.slice(cur)));
+    n.parentNode.replaceChild(frag, n);
+  });
+  var marques = Array.prototype.slice.call(article.querySelectorAll("mark.trouve")), courant = -1;
+  var barre = document.getElementById("barre-trouve"), etat = document.getElementById("trouve-etat");
+  barre.hidden = false;
+  document.getElementById("trouve-fermer").href = location.pathname;
+  if (!marques.length) { etat.textContent = "« " + q + " » n'apparaît pas dans le texte affiché (titre ou tags seulement)."; return; }
+  function aller(i) {
+    if (courant >= 0) marques[courant].classList.remove("actuelle");
+    courant = (i + marques.length) % marques.length;
+    marques[courant].classList.add("actuelle");
+    marques[courant].scrollIntoView({block: "center", behavior: "smooth"});
+    etat.textContent = "« " + q + " » : " + (courant + 1) + " sur " + marques.length;
+  }
+  document.getElementById("trouve-suiv").addEventListener("click", function () { aller(courant + 1); });
+  document.getElementById("trouve-prec").addEventListener("click", function () { aller(courant - 1); });
+  aller(0);
+})();
+
+(function () {
+  // Copier le chemin du document (à donner à Claude)
+  document.querySelectorAll(".chemin-copiable").forEach(function (b) {
+    b.addEventListener("click", function () {
+      navigator.clipboard.writeText(b.dataset.copie).then(function () {
+        b.classList.add("copie"); setTimeout(function () { b.classList.remove("copie"); }, 1500);
+      });
+    });
+  });
+  // Sommaire : section en cours de lecture
+  var liens = Array.prototype.slice.call(document.querySelectorAll(".sommaire a"));
+  if (!liens.length || !("IntersectionObserver" in window)) return;
+  var parId = {};
+  liens.forEach(function (a) { parId[a.getAttribute("href").slice(1)] = a; });
+  var obs = new IntersectionObserver(function (entrees) {
+    entrees.forEach(function (e) {
+      if (e.isIntersecting && parId[e.target.id]) {
+        liens.forEach(function (a) { a.classList.remove("courant"); });
+        parId[e.target.id].classList.add("courant");
+      }
+    });
+  }, {rootMargin: "0px 0px -75% 0px"});
+  Object.keys(parId).forEach(function (id) { var t = document.getElementById(id); if (t) obs.observe(t); });
+  // Ouvrir le panneau Versions depuis le menu
+  if (location.hash === "#versions") document.getElementById("versions").open = true;
+  document.querySelectorAll('a[href="#versions"]').forEach(function (a) {
+    a.addEventListener("click", function () { document.getElementById("versions").open = true; });
+  });
+})();
+</script>
+{% endblock %}

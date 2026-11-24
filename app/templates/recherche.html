@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}Recherche « {{ q }} » — MCP Memory{% endblock %}
+{% block contenu %}
+<nav class="fil-ariane"><a href="/">Accueil</a><span>/</span><span>Recherche</span></nav>
+<form action="/" method="get" class="grande-recherche compacte" role="search">
+  <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+  <input type="search" name="q" value="{{ q }}" aria-label="Rechercher dans tous les documents">
+  <button class="primaire">Rechercher</button>
+</form>
+<p class="sous">{{ resultats|length }} document{{ 's' if resultats|length > 1 }} contien{{ 'nen' if resultats|length > 1 else 'ne' }}t « {{ q }} »
+  {% if nb_archives %}·
+    {% if archives %}<a href="/?q={{ q|urlencode }}">masquer les {{ nb_archives }} archive{{ 's' if nb_archives > 1 }}</a>
+    {% else %}<a href="/?q={{ q|urlencode }}&amp;archives=1">inclure {{ nb_archives }} archive{{ 's' if nb_archives > 1 }}</a>{% endif %}
+  {% endif %}
+  <span class="note">· sans tenir compte des accents ni des majuscules</span></p>
+
+{% for doc, extraits in resultats %}
+  <a class="resultat" href="/doc/{{ doc.chemin }}?q={{ q|urlencode }}">
+    <span class="resultat-tete">
+      <strong>{{ doc.titre }}</strong>
+      {% if 'archive' in doc.tags %}<span class="pastille">archive</span>{% endif %}
+      <span class="ligne-meta"><span class="tag">{{ titres.get(doc.categorie, 'Sans projet') }}</span> {{ tailles[doc.chemin]|tokens }}</span>
+    </span>
+    {% for e in extraits %}<span class="extrait">{{ e }}</span>{% endfor %}
+  </a>
+{% else %}
+  <div class="vide"><h2>Aucun résultat</h2><p>Tous les mots doivent apparaître dans le même document. Essayez moins de mots ou un synonyme.</p></div>
+{% endfor %}
+{% endblock %}

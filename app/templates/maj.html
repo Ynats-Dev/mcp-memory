@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block largeur %}etroit{% endblock %}
+{% block titre %}Mise à jour — MCP Memory{% endblock %}
+{% block contenu %}
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Application</p>
+    <h1>Mise à jour</h1>
+    <p class="sous">Compare la version en service au dépôt Git, puis met à jour et redémarre en un clic.</p>
+  </div>
+</header>
+
+{% if not etat.installe %}
+<section class="carte">
+  <h2>Service de mise à jour non installé</h2>
+  <p>Pour des raisons de sécurité, l'interface n'a accès ni à Docker ni au dépôt : un petit service
+     de l'hôte s'en charge. À installer une fois sur le serveur :</p>
+  <pre>cd /opt/mcp-memory && git pull && docker compose up -d
+sudo scripts/installer-maj.sh</pre>
+  <p class="note">Puis recharger cette page.</p>
+</section>
+{% else %}
+<section class="carte" id="maj">
+  <div class="maj-tete">
+    <span class="pastille" id="maj-pastille"></span>
+    <span id="maj-message" class="maj-message"></span>
+  </div>
+  <dl class="maj-versions">
+    <dt>En service</dt><dd id="maj-version"></dd>
+    <dt>Dépôt</dt><dd id="maj-distant"></dd>
+    <dt>Dernière vérification</dt><dd id="maj-verifie"></dd>
+    <dt>Dernière mise à jour</dt><dd id="maj-maj"></dd>
+  </dl>
+  <div id="maj-alerte"></div>
+  <div id="maj-commits"></div>
+  <div class="actions">
+    <button type="button" id="maj-appliquer" class="primaire">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Mettre à jour et redémarrer</button>
+    <button type="button" id="maj-verifier">Vérifier maintenant</button>
+  </div>
+  <p class="note">La mise à jour fait <code>git pull</code> puis reconstruit et redémarre les conteneurs
+     (une à deux minutes) ; les documents ne sont pas touchés. Claude Desktop peut demander à être relancé
+     si la liste des outils MCP a changé.</p>
+</section>
+
+<details class="carte deroulant-journal" id="maj-journal-bloc" {{ 'open' if etat.statut == 'erreur' }}>
+  <summary>Journal de la dernière opération</summary>
+  <pre id="maj-journal">{{ journal or '(vide)' }}</pre>
+</details>
+
+<script id="maj-etat" type="application/json">{{ etat|tojson }}</script>
+<script>
+(function () {
+  var etat = JSON.parse(document.getElementById("maj-etat").textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  var suivi = null, redemarrage = false, coupure = false, versionAvant = etat.version, majAvant = etat.maj_le;
+
+  function quand(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleString("fr-FR", {dateStyle: "medium", timeStyle: "short"});
+  }
+  function esc(t) { var e = document.createElement("span"); e.textContent = t == null ? "" : t; return e.innerHTML; }
+  function enCours(e) { return e.en_attente || e.statut === "verification" || e.statut === "mise_a_jour"; }
+
+  function afficher(e, texteForce, classeForce) {
+    var classe, texte;
+    if (texteForce) { classe = classeForce; texte = texteForce; }
+    else if (e.hote_inactif) { classe = "ko"; texte = "Le service de l'hôte ne répond pas."; }
+    else if (e.en_attente) { classe = "attente"; texte = "Demande transmise au serveur…"; }
+    else if (e.statut === "verification") { classe = "attente"; texte = "Recherche de mises à jour…"; }
+    else if (e.statut === "mise_a_jour") { classe = "attente"; texte = "Mise à jour en cours (git pull, reconstruction)…"; }
+    else if (e.statut === "erreur") { classe = "ko"; texte = e.message || "Échec."; }
+    else if (e.disponible) { classe = "dispo"; texte = e.retard + " mise(s) à jour disponible(s)"; }
+    else { classe = "ok"; texte = "À jour"; }
+    var p = $("maj-pastille");
+    p.className = "pastille " + classe;
+    p.textContent = {ok: "À jour", dispo: "Disponible", attente: "En cours", ko: "Problème"}[classe] || "";
+    $("maj-message").textContent = texte;
+
+    $("maj-version").innerHTML = e.version
+      ? "<code>" + esc(e.version) + "</code>" + (e.local === e.version && e.local_sujet ? " — " + esc(e.local_sujet) : "")
+        + (e.local_date && e.local === e.version ? " <span class='note'>(" + quand(e.local_date) + ")</span>" : "")
+      : "inconnue";
+    $("maj-distant").innerHTML = e.distant
+      ? "<code>" + esc(e.distant) + "</code>" + (e.branche ? " <span class='note'>(origin/" + esc(e.branche) + ")</span>" : "")
+      : "—";
+    $("maj-verifie").textContent = quand(e.verifie_le);
+    $("maj-maj").textContent = quand(e.maj_le);
+
+    var alertes = [];
+    if (e.hote_inactif) alertes.push("La demande n'a pas été prise en charge. Sur le serveur : <code>systemctl status mcp-memory-maj.path</code> (ou relancer <code>sudo scripts/installer-maj.sh</code>).");
+    if (e.modifs_locales) alertes.push("Le dossier du serveur contient des modifications locales : la mise à jour sera refusée tant qu'elles existent.");
+    if (e.decalage && !enCours(e)) alertes.push("La version en service (<code>" + esc(e.version) + "</code>) diffère du dépôt local (<code>" + esc(e.local) + "</code>) : « Mettre à jour » reconstruira les conteneurs.");
+    $("maj-alerte").innerHTML = alertes.map(function (a) { return "<p class='alerte'><span>" + a + "</span></p>"; }).join("");
+
+    var c = e.commits || [];
+    $("maj-commits").innerHTML = c.length
+      ? "<h2>Nouveautés</h2><div class='journal'>" + c.map(function (x) {
+          return "<div class='ligne'><span class='sha'>" + esc(x.sha) + "</span><span class='msg'>" + esc(x.sujet)
+            + "</span><span class='qui'>" + quand(x.date) + "</span></div>"; }).join("") + "</div>"
+      : "";
+
+    var occupe = enCours(e) && !e.hote_inactif || redemarrage;
+    $("maj-appliquer").disabled = occupe;
+    $("maj-verifier").disabled = occupe;
+    $("maj-appliquer").classList.toggle("primaire", !!(e.disponible || e.decalage) || e.statut === "erreur");
+    if (e.journal !== undefined) $("maj-journal").textContent = e.journal || "(vide)";
+    if (e.statut === "erreur") $("maj-journal-bloc").open = true;
+  }
+
+  function suivre() {
+    clearTimeout(suivi);
+    fetch("/mise-a-jour/etat", {cache: "no-store", credentials: "same-origin"})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (e) {
+        etat = e;
+        if (redemarrage) {
+          var fini = !enCours(e) && (coupure || e.version !== versionAvant || e.maj_le !== majAvant || e.statut === "erreur");
+          if (fini && e.statut !== "erreur") {
+            afficher(e, e.message || "Mise à jour terminée.", "ok");
+            setTimeout(function () { location.reload(); }, 1500);
+            return;
+          }
+          if (fini) { redemarrage = false; afficher(e); return; }
+        }
+        afficher(e);
+        if (enCours(e) || redemarrage) suivi = setTimeout(suivre, 2000);
+      })
+      .catch(function () {
+        if (redemarrage) {  // conteneur web en cours de redémarrage
+          coupure = true;
+          afficher(etat, "Redémarrage de l'application…", "attente");
+        }
+        suivi = setTimeout(suivre, 3000);
+      });
+  }
+
+  function demander(action) {
+    return fetch("/mise-a-jour/" + action, {method: "POST", credentials: "same-origin"})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { redemarrage = false; afficher(etat, d.message, "ko"); return; }
+        etat.en_attente = true; afficher(etat); suivre();
+      })
+      .catch(function () { redemarrage = false; afficher(etat, "Demande impossible.", "ko"); });
+  }
+
+  $("maj-verifier").addEventListener("click", function () { demander("verifier"); });
+  $("maj-appliquer").addEventListener("click", function () {
+    if (!confirm("Mettre à jour et redémarrer l'application ?\nL'interface et le serveur MCP seront indisponibles une à deux minutes.")) return;
+    redemarrage = true; coupure = false; versionAvant = etat.version; majAvant = etat.maj_le;
+    demander("appliquer");
+  });
+
+  afficher(etat);
+  if (enCours(etat)) suivre();
+})();
+</script>
+{% endif %}
+{% endblock %}

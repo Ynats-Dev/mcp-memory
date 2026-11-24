@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://mcp.example.com/mcp",
+        "--header", "Authorization:${CONTEXTE_AUTH}"
+      ],
+      "env": {
+        "CONTEXTE_AUTH": "Bearer COLLER_ICI_LE_MCP_TOKEN"
+      }
+    }
+  }
+}

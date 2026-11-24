@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block largeur %}etroit{% endblock %}
+{% block titre %}Erreur — MCP Memory{% endblock %}
+{% block contenu %}
+<header class="page-tete"><h1>Impossible de continuer</h1></header>
+<p class="alerte">{{ message }}</p>
+<a class="bouton" href="javascript:history.back()">← Retour</a>
+{% endblock %}
