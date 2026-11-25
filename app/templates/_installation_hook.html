@@ -1,0 +1,44 @@
+{# Bloc « Activer sur un poste », commun aux modes simple et avancé. Variables : config, ouvert #}
+<details class="carte" id="installation" {{ 'open' if ouvert }}>
+  <summary><h2 style="display:inline">Activer sur un poste (une seule fois)</h2></summary>
+  <p>Un seul hook, posé une fois dans <code>~/.claude/settings.json</code> : avant chaque action, Claude Code
+     interroge ce serveur, qui applique les règles de cette page. Ensuite, tout se règle ici.</p>
+  <ol class="etapes">
+    <li><strong>Nom du serveur.</strong> Dans un terminal : <code>claude mcp list</code>. Le nom est ce qui
+      précède les deux-points (<code>mcp-memory: https://…/mcp (HTTP) - ✔ Connected</code>). Le reporter ici :
+      <input id="nom-serveur" value="mcp-memory" spellcheck="false" autocomplete="off"
+             pattern="[A-Za-z0-9_.:\-]+" aria-label="Nom du serveur dans Claude Code"></li>
+    <li><strong>Portée.</strong> <code>claude mcp get <span class="nom-serveur">mcp-memory</span></code> doit
+      afficher <code>Scope: User config</code> (serveur disponible dans tous les projets). Sinon, le réenregistrer
+      avec <code>--scope user</code> (commande sur la page <a href="/claude">Connexion Claude</a>) : ailleurs,
+      le hook ne trouverait pas le serveur et laisserait tout passer.</li>
+    <li><strong>Copier le bloc</strong> et le fusionner dans <code>~/.claude/settings.json</code>, à côté des
+      hooks existants (sans les remplacer). Vous pouvez aussi demander à Claude Code : « ajoute ce hook à mes
+      réglages globaux ».
+      <pre id="config-hook" data-modele="{{ config }}">{{ config }}</pre>
+      <div class="actions"><button type="button" class="bouton" id="copier-config">Copier</button></div></li>
+    <li><strong>Vérifier.</strong> Dans Claude Code, <code>/hooks</code> doit lister le hook <code>mcp_tool</code>.
+      Avec la règle « Me demander avant chaque git push » active, demander à Claude d'exécuter
+      <code>echo git push</code> (sans effet) : une demande de confirmation doit apparaître.</li>
+  </ol>
+  <p class="note">Le bloc est fixe (<code>"matcher": "*"</code> : le serveur est consulté avant chaque action) :
+     une règle ajoutée ici s'applique tout de suite, sans rien recopier. <code>onFailure: continue</code> : si le serveur est injoignable, l'action suit le circuit normal
+     des permissions (mettre <code>block</code> pour tout bloquer dans ce cas). Les hooks n'existent que dans
+     Claude Code : pour claude.ai et Claude Desktop, utilisez les <a href="/doc/directives">directives</a>.</p>
+</details>
+<script>
+(function () {
+  var nom = document.getElementById("nom-serveur"), pre = document.getElementById("config-hook"),
+      bouton = document.getElementById("copier-config"), modele = pre.dataset.modele;
+  function maj() {
+    var n = (nom.value || "").trim() || "mcp-memory";
+    pre.textContent = modele.replace('"server": "mcp-memory"', '"server": ' + JSON.stringify(n));
+    Array.prototype.forEach.call(document.querySelectorAll(".nom-serveur"), function (e) { e.textContent = n; });
+    bouton.textContent = "Copier";
+  }
+  nom.addEventListener("input", maj);
+  bouton.addEventListener("click", function () {
+    navigator.clipboard.writeText(pre.textContent).then(function () { bouton.textContent = "Copié"; });
+  });
+})();
+</script>

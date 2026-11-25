@@ -20,7 +20,9 @@ from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 from markupsafe import Markup, escape
 
-from . import fichier_projet, indicateurs, maj, sauvegarde, usage
+import json
+
+from . import fichier_projet, indicateurs, maj, regles, sauvegarde, usage
 from .sections import taille as taille_tokens
 from .compte import COOKIE, Comptes, ErreurCompte
 from .importer import nom_document
@@ -617,6 +619,138 @@ def voir_projet(request: Request, slug: str, msg: str = "", user: str = Depends(
                  resume=resume, actifs=[i for i in lignes if not i.archive and i is not resume],
                  archives=[i for i in lignes if i.archive], infos_sous=sous,
                  procedures=projet.slug == PROJET_PROCEDURES)
+
+
+# ------------------------------------------------------------ règles (hooks Claude Code)
+def _page_regles(request: Request, msg: str = "", erreur: str = "", test: dict | None = None,
+                 mode: str = "simple", saisie: dict | None = None):
+    liste = regles.lire(store)
+    config = json.dumps(regles.configuration_hook(), ensure_ascii=False, indent=2)
+    if mode != "avance":
+        par_id = {r.id: r for r in liste}
+        ids_modeles = {m["id"] for m in regles.MODELES}
+        return rendu(request, "regles_simple.html", msg=msg, erreur=erreur, config=config,
+                     modeles=[(m, par_id.get(m["id"])) for m in regles.MODELES],
+                     mes_regles=[r for r in liste if r.id not in ids_modeles], phrase=regles.phrase,
+                     actions=regles.ACTIONS, decisions=regles.DECISIONS_SIMPLES, saisie=saisie or {},
+                     installe=bool(liste))
+    return rendu(request, "regles.html", regles=liste, msg=msg, erreur=erreur, test=test or {},
+                 config=config, decisions=regles.DECISIONS, champs=regles.CHAMPS)
+
+
+@app.get("/regles", response_class=HTMLResponse)
+def page_regles(request: Request, msg: str = "", erreur: str = "", mode: str = "simple", modifier: str = "",
+                user: str = Depends(utilisateur)):
+    saisie = None
+    if modifier:  # mode simple : constructeur prérempli
+        r = next((r for r in regles.lire(store) if r.id == modifier), None)
+        if r and r.action:
+            saisie = {"ancien_id": r.id, "action": r.action, "cible": r.cible, "decision": r.decision,
+                      "message": r.message if r.message != f"Règle « {r.nom} »." else ""}
+    return _page_regles(request, msg, erreur, mode=mode, saisie=saisie)
+
+
+@app.post("/regles/simple", response_class=HTMLResponse, dependencies=[Depends(meme_origine)])
+def regle_simple(request: Request, action: str = Form(""), cible: str = Form(""), decision: str = Form("ask"),
+                 message: str = Form(""), ancien_id: str = Form(""), user: str = Depends(utilisateur)):
+    """Constructeur du mode simple : « Quand Claude veut … alors … »."""
+    try:
+        if ancien_id:
+            ancienne = next((r for r in regles.lire(store) if r.id == ancien_id), None)
+            if not ancienne:
+                raise ErreurContexte("Cette règle n'existe plus.")
+            brouillon = regles.Regle(id=ancien_id, nom="", action=action, cible=cible, decision=decision)
+            nom = regles.phrase(brouillon)[:120] if action in regles.ACTIONS else ""
+            regle, _ = regles.enregistrer(store, dict(id=ancien_id, nom=nom, action=action, cible=cible,
+                                                       decision=decision, message=message, actif=ancienne.actif),
+                                          ancien_id, auteur=f"web:{user}")
+        else:
+            regle = regles.creer_simple(store, action, cible, decision, message, auteur=f"web:{user}")
+    except ErreurContexte as e:
+        saisie = dict(action=action, cible=cible, decision=decision, message=message, ancien_id=ancien_id)
+        return _page_regles(request, erreur=str(e), saisie=saisie)
+    return RedirectResponse(f"/regles?{urlencode({'msg': f'Règle enregistrée : {regles.phrase(regle)}.'})}"
+                            f"#r-{regle.id}", status_code=303)
+
+
+@app.post("/regles/modele/{id_}", dependencies=[Depends(meme_origine)])
+def regle_modele(id_: str, user: str = Depends(utilisateur)):
+    r = regles.basculer_modele(store, id_, auteur=f"web:{user}")
+    msg = f"« {r.nom} » {'activée' if r.actif else 'désactivée'}."
+    return RedirectResponse(f"/regles?{urlencode({'msg': msg})}#modeles", status_code=303)
+
+
+@app.get("/regles/nouvelle", response_class=HTMLResponse)
+def nouvelle_regle(request: Request, user: str = Depends(utilisateur)):
+    return rendu(request, "regle_form.html", regle=None, decisions=regles.DECISIONS, champs=regles.CHAMPS)
+
+
+@app.get("/regles/{id_}/modifier", response_class=HTMLResponse)
+def modifier_regle(request: Request, id_: str, user: str = Depends(utilisateur)):
+    regle = next((r for r in regles.lire(store) if r.id == id_), None)
+    if not regle:
+        raise ErreurContexte(f"La règle « {id_} » n'existe pas.")
+    return rendu(request, "regle_form.html", regle=regle, decisions=regles.DECISIONS, champs=regles.CHAMPS)
+
+
+@app.post("/regles/enregistrer", dependencies=[Depends(meme_origine)])
+def enregistrer_regle(request: Request, ancien_id: str = Form(""), id_: str = Form("", alias="id"),
+                      nom: str = Form(""), outil: str = Form(""), champ: str = Form("commande"),
+                      motif: str = Form(""), decision: str = Form("ask"), message: str = Form(""),
+                      actif: str = Form(""), user: str = Depends(utilisateur)):
+    donnees = dict(id=id_, nom=nom, outil=outil, champ=champ, motif=motif, decision=decision,
+                   message=message, actif=bool(actif))
+    try:
+        regle, _ = regles.enregistrer(store, donnees, ancien_id or None, auteur=f"web:{user}")
+    except ErreurContexte as e:  # réafficher le formulaire sans perdre la saisie
+        return rendu(request, "regle_form.html", regle=regles.Regle(**donnees), ancien_id=ancien_id,
+                     erreur=str(e), decisions=regles.DECISIONS, champs=regles.CHAMPS)
+    return RedirectResponse(f"/regles?{urlencode({'msg': f'Règle « {regle.nom} » enregistrée.', 'mode': 'avance'})}"
+                            f"#r-{regle.id}", status_code=303)
+
+
+@app.post("/regles/{id_}/basculer", dependencies=[Depends(meme_origine)])
+def basculer_regle(id_: str, mode: str = Form("simple"), user: str = Depends(utilisateur)):
+    r = regles.basculer(store, id_, auteur=f"web:{user}")
+    msg = f"Règle « {r.nom} » {'activée' if r.actif else 'désactivée'}."
+    return RedirectResponse(f"/regles?{urlencode({'msg': msg, 'mode': mode})}#r-{r.id}", status_code=303)
+
+
+@app.post("/regles/{id_}/supprimer", dependencies=[Depends(meme_origine)])
+def supprimer_regle(id_: str, mode: str = Form("simple"), user: str = Depends(utilisateur)):
+    regles.supprimer(store, id_, auteur=f"web:{user}")
+    return RedirectResponse(f"/regles?{urlencode({'msg': 'Règle supprimée.', 'mode': mode})}", status_code=303)
+
+
+@app.post("/regles/ordre", dependencies=[Depends(meme_origine)])
+async def ordonner_regles(request: Request, user: str = Depends(utilisateur)):
+    try:
+        ordre = (await request.json()).get("ordre")
+    except (ValueError, AttributeError):
+        ordre = None
+    if not isinstance(ordre, list):
+        raise HTTPException(400, "Liste « ordre » attendue.")
+    regles.ordonner(store, [str(i) for i in ordre], auteur=f"web:{user}")
+    return {"ok": True}
+
+
+@app.post("/regles/git", dependencies=[Depends(meme_origine)])
+def regles_git(user: str = Depends(utilisateur)):
+    n = regles.ajouter_regles_git(store, auteur=f"web:{user}")
+    msg = f"{n} règle(s) Git ajoutée(s)." if n else "Les règles Git recommandées sont déjà présentes."
+    return RedirectResponse(f"/regles?{urlencode({'msg': msg, 'mode': 'avance'})}", status_code=303)
+
+
+@app.post("/regles/tester", response_class=HTMLResponse, dependencies=[Depends(meme_origine)])
+def tester_regles(request: Request, outil: str = Form("Bash"), champ: str = Form("commande"),
+                  texte: str = Form(""), user: str = Depends(utilisateur)):
+    """Simule une action : ce que le hook répondrait à Claude Code."""
+    outil = outil.strip() or "Bash"
+    champ = champ if champ in ("commande", "fichier", "contenu") else "commande"
+    sortie, declenchees = regles.evaluer(regles.lire(store), outil, **{champ: texte})
+    test = {"outil": outil, "champ": champ, "texte": texte, "sortie": sortie.get("hookSpecificOutput", {}),
+            "declenchees": [r.id for r in declenchees]}
+    return _page_regles(request, test=test, mode="avance")
 
 
 @app.get("/historique", response_class=HTMLResponse)

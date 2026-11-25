@@ -514,3 +514,30 @@ mark.trouve.actuelle{background:#ffc94d;box-shadow:0 0 0 2px #ffc94d}
 .bandeau-directives svg{width:18px;height:18px;flex:none;margin-top:2px}
 .champ-prefixe{display:flex;align-items:center;gap:4px}
 .champ-prefixe input{flex:1}
+
+/* Hooks (règles Claude Code) */
+.champs.deux{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:760px){.champs.deux{grid-template-columns:minmax(0,1fr)}}
+.ligne.regle{cursor:grab;align-items:center;flex-wrap:wrap;gap:6px 14px}
+.ligne.regle.inactive{opacity:.55}
+.ligne.regle .ligne-titre{display:flex;align-items:center;gap:8px;min-width:0}
+.regle-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.regle-meta form{display:inline}
+.regle-meta code.motif{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+input.mono{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:.88rem}
+.onglets{display:inline-flex;gap:2px;padding:3px;margin:0 0 18px;border:1px solid var(--bord);border-radius:var(--rayon-petit);background:var(--surface-2)}
+.onglets a{padding:5px 14px;border-radius:6px;color:var(--doux);font-weight:500;font-size:.9rem}
+.onglets a:hover{text-decoration:none;color:var(--texte)}
+.onglets a.actif{background:var(--surface);color:var(--texte);box-shadow:var(--ombre)}
+.interrupteur-ligne{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0}
+.interrupteur-ligne .ligne-titre{display:flex;flex-direction:column;gap:2px}
+.interrupteur{position:relative;flex:none;width:40px;height:23px;padding:0;border-radius:999px;border:1px solid var(--bord);background:var(--survol);cursor:pointer;box-shadow:none}
+.interrupteur span{position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:var(--surface);box-shadow:var(--ombre);transition:left .15s}
+.interrupteur.on{background:var(--plus-texte);border-color:transparent}
+.interrupteur.on span{left:19px}
+.phrase{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:1rem}
+.phrase select,.phrase input{width:auto;min-width:180px}
+.phrase input{flex:1}
+.etapes{padding-left:1.3em;display:grid;gap:12px;margin:12px 0}
+.etapes input{display:inline-block;width:auto;min-width:200px;margin:6px 0 0 6px}
+.etapes pre{margin-top:8px}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block largeur %}moyen{% endblock %}
+{% block titre %}Hooks — MCP Memory{% endblock %}
+{% block contenu %}
+<header class="page-tete">
+  <div>
+    <p class="surtitre">Claude Code</p>
+    <h1>Hooks</h1>
+    <p class="sous">Règles appliquées avant chaque action de Claude Code : refuser, demander confirmation,
+       autoriser ou ajouter une consigne. Elles prennent effet immédiatement, sans toucher aux postes.</p>
+  </div>
+  <div class="actions">
+    <a class="bouton primaire" href="/regles/nouvelle">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouvelle règle</a>
+  </div>
+</header>
+<nav class="onglets" aria-label="Mode d'affichage">
+  <a href="/regles">Simple</a>
+  <a href="/regles?mode=avance" class="actif" aria-current="page">Avancé</a>
+</nav>
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
+
+<section class="bloc">
+  <div class="titre-bloc"><h2>Règles <span class="n">{{ regles|length }}</span></h2>
+    <span class="note">glisser pour réordonner · la décision la plus stricte l'emporte</span></div>
+  {% if regles %}
+  <div class="liste-lignes" id="liste-regles">
+  {% for r in regles %}
+    <div class="ligne regle {{ 'inactive' if not r.actif }}" id="r-{{ r.id }}" data-id="{{ r.id }}" draggable="true">
+      <span class="ligne-titre">
+        <span class="pastille {{ {'deny': 'ko', 'ask': 'dispo', 'allow': 'ok', 'contexte': ''}[r.decision] }}">{{ decisions[r.decision] }}</span>
+        <a href="/regles/{{ r.id }}/modifier">{{ r.nom }}</a>
+        {% if not r.actif %}<span class="tag">désactivée</span>{% endif %}
+      </span>
+      <span class="ligne-meta regle-meta">
+        <code title="Outil">{{ r.outil or '*' }}</code>
+        <span title="{{ champs[r.champ] }}">{{ r.champ }}</span>
+        <code class="motif" title="{{ r.motif }}">{{ r.motif or '(tout)' }}</code>
+        <form method="post" action="/regles/{{ r.id }}/basculer"><input type="hidden" name="mode" value="avance">
+          <button class="lien petit">{{ 'Désactiver' if r.actif else 'Activer' }}</button></form>
+        <form method="post" action="/regles/{{ r.id }}/supprimer" onsubmit="return confirm('Supprimer la règle « {{ r.nom }} » ?')">
+          <input type="hidden" name="mode" value="avance"><button class="lien petit danger">Supprimer</button></form>
+      </span>
+    </div>
+  {% endfor %}
+  </div>
+  {% else %}
+  <div class="vide">
+    <h2>Aucune règle</h2>
+    <p>Commencez par les règles Git recommandées (confirmer tout <code>git push</code>, refuser les commits
+       signés Claude), ou créez la vôtre.</p>
+  </div>
+  {% endif %}
+  <form method="post" action="/regles/git" class="actions">
+    <button class="lien petit">+ Ajouter les règles Git recommandées</button></form>
+</section>
+
+<section class="carte" id="tester">
+  <h2>Tester une action</h2>
+  <p class="note">Ce que le hook répondrait à Claude Code, sans rien exécuter.</p>
+  <form method="post" action="/regles/tester#tester" class="formulaire">
+    <div class="champs trois">
+      <label>Outil <input name="outil" value="{{ test.outil|default('Bash') }}" list="outils-connus"></label>
+      <label>Champ
+        <select name="champ">
+          {% for c in ['commande', 'fichier', 'contenu'] %}<option value="{{ c }}" {{ 'selected' if test.champ == c }}>{{ c }}</option>{% endfor %}
+        </select></label>
+      <label>Texte <input name="texte" value="{{ test.texte|default('') }}" placeholder="git push origin master"></label>
+    </div>
+    <datalist id="outils-connus"><option value="Bash"><option value="Write"><option value="Edit"><option value="Read"></datalist>
+    <div class="actions"><button class="primaire">Tester</button></div>
+  </form>
+  {% if test %}
+    {% set d = test.sortie.permissionDecision %}
+    <p class="{{ 'alerte' if d == 'deny' else 'info' }}"><span>
+      {% if d %}<strong>{{ decisions[d] }}</strong> — {{ test.sortie.permissionDecisionReason }}
+      {% elif test.sortie.additionalContext %}<strong>Consigne ajoutée</strong> — {{ test.sortie.additionalContext }}
+      {% else %}Aucune règle ne s'applique : l'action suit le circuit normal des permissions.{% endif %}
+      {% if test.declenchees %}<br><small>Règles : {{ test.declenchees|join(', ') }}</small>{% endif %}
+    </span></p>
+  {% endif %}
+</section>
+
+{% with ouvert = not regles %}{% include "_installation_hook.html" %}{% endwith %}
+
+<script>
+// Glisser-déposer : ordre des règles (affichage et lecture ; la décision la plus stricte l'emporte toujours)
+(function () {
+  var liste = document.getElementById("liste-regles");
+  if (!liste) return;
+  var tire = null, avant = "";
+  function ordre() { return Array.prototype.map.call(liste.querySelectorAll("[data-id]"), function (e) { return e.dataset.id; }); }
+  liste.addEventListener("dragstart", function (e) {
+    tire = e.target.closest && e.target.closest("[data-id]"); if (!tire) return;
+    avant = ordre().join(","); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", tire.dataset.id);
+  });
+  liste.addEventListener("dragover", function (e) {
+    if (!tire) return; e.preventDefault();
+    var c = e.target.closest && e.target.closest("[data-id]"); if (!c || c === tire) return;
+    var r = c.getBoundingClientRect();
+    liste.insertBefore(tire, e.clientY > r.top + r.height / 2 ? c.nextSibling : c);
+  });
+  liste.addEventListener("drop", function (e) { if (tire) e.preventDefault(); });
+  liste.addEventListener("dragend", function () {
+    if (!tire) return; tire = null;
+    var ids = ordre(); if (ids.join(",") === avant) return;
+    fetch("/regles/ordre", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ordre: ids})})
+      .then(function (r) { if (!r.ok) throw new Error(r.status); })
+      .catch(function () { alert("L'ordre n'a pas pu être enregistré."); location.reload(); });
+  });
+})();
+</script>
+{% endblock %}

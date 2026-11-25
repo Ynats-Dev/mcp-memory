@@ -8,6 +8,7 @@ Endpoint : http://<hôte>:8765/mcp — authentification :
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
+from . import regles
 from . import sections as sec
 from . import usage
 from .store import DOC_DIRECTIVES, PROJET_PROCEDURES, Document, ErreurContexte, Store, empreinte, plier
@@ -401,6 +403,14 @@ def historique(chemin: str | None = None, limite: int = 20) -> str:
     """Dernières modifications (de tout le contexte ou d'un document)."""
     revs = store.historique(chemin, limite)
     return "\n".join(f"{r.sha}  {r.date}  {r.auteur} — {r.message}" for r in revs) or "Aucun historique."
+
+
+@mcp.tool(structured_output=False)
+def controler_action(outil: str, commande: str = "", fichier: str = "", contenu: str = "",
+                     nouveau: str = "") -> str:
+    """Réservé au hook Claude Code (règles administrées dans l'interface) : ne pas appeler soi-même."""
+    sortie, _ = regles.evaluer(regles.lire(store), outil, commande, fichier, contenu, nouveau)
+    return json.dumps(sortie, ensure_ascii=False)
 
 
 def _alleger_schemas() -> None:

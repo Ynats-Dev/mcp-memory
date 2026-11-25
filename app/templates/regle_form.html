@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block largeur %}etroit{% endblock %}
+{% block titre %}{{ 'Modifier la règle' if regle else 'Nouvelle règle' }} — MCP Memory{% endblock %}
+{% block contenu %}
+{% set ancien = ancien_id if ancien_id is defined else (regle.id if regle else '') %}
+<nav class="fil-ariane"><a href="/regles">Hooks</a><span>/</span><span>{{ regle.nom if regle and regle.nom else 'Nouvelle règle' }}</span></nav>
+<header class="page-tete"><h1>{{ 'Modifier la règle' if ancien else 'Nouvelle règle' }}</h1></header>
+{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
+
+<form method="post" action="/regles/enregistrer" class="carte formulaire">
+  <input type="hidden" name="ancien_id" value="{{ ancien }}">
+  <label>Nom <input name="nom" id="nom" value="{{ regle.nom if regle else '' }}" required autofocus
+                    placeholder="Confirmer tout git push"></label>
+  <label>Identifiant <small class="note">minuscules, chiffres, tirets</small>
+    <input name="id" id="ident" value="{{ regle.id if regle else '' }}" required pattern="[a-z0-9][a-z0-9\-]*"
+           placeholder="git-push"></label>
+  <div class="champs deux">
+    <label>Outil <small class="note">expression régulière : Bash, Write|Edit, mcp__.*</small>
+      <input name="outil" value="{{ regle.outil if regle else 'Bash' }}" spellcheck="false" list="outils-connus"></label>
+    <label>Champ examiné
+      <select name="champ">
+        {% for c, lib in champs.items() %}<option value="{{ c }}" {{ 'selected' if (regle.champ if regle else 'commande') == c }}>{{ lib }}</option>{% endfor %}
+      </select></label>
+  </div>
+  <datalist id="outils-connus"><option value="Bash"><option value="Write|Edit"><option value="Read"><option value="mcp__.*"></datalist>
+  <label>Motif <small class="note">expression régulière cherchée dans le champ, insensible à la casse ; vide = toujours</small>
+    <input name="motif" value="{{ regle.motif if regle else '' }}" spellcheck="false" class="mono"
+           placeholder="\bgit\b.*\bpush\b"></label>
+  <label>Décision
+    <select name="decision">
+      {% for d, lib in decisions.items() %}<option value="{{ d }}" {{ 'selected' if (regle.decision if regle else 'ask') == d }}>{{ lib }}</option>{% endfor %}
+    </select></label>
+  <label>Message <small class="note">montré à Claude (et à vous lors d'une confirmation) ; pour « consigne », le texte transmis</small>
+    <textarea name="message" rows="3" style="min-height:0;font-family:inherit;font-size:inherit">{{ regle.message if regle else '' }}</textarea></label>
+  <label class="case"><input type="checkbox" name="actif" value="1" {{ 'checked' if not regle or regle.actif }}> Règle active</label>
+  <div class="actions">
+    <button class="primaire">Enregistrer</button>
+    <a class="lien" href="/regles">Annuler</a>
+  </div>
+</form>
+{% if not ancien %}
+<script>
+(function () {  // identifiant proposé à partir du nom
+  var nom = document.getElementById("nom"), id = document.getElementById("ident"), manuel = false;
+  id.addEventListener("input", function () { manuel = true; });
+  nom.addEventListener("input", function () {
+    if (manuel) return;
+    id.value = nom.value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

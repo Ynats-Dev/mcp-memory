@@ -78,10 +78,64 @@ serveur ; Claude lit la procédure (`lire_document`) avant d'effectuer la tâche
 Créez le projet `procedures` comme n'importe quel projet, et donnez des titres explicites :
 c'est sur eux que Claude décide d'ouvrir une procédure.
 
+### Hooks (règles appliquées par Claude Code)
+
+La page **Hooks** administre des règles évaluées **avant chaque action** de Claude Code :
+refuser, demander confirmation, autoriser sans demander, ou ajouter une consigne pour Claude.
+Exemples : confirmer tout `git push`, refuser un commit signé Claude, rappeler une consigne
+avant toute écriture dans un `.env`.
+
+- **Mode simple** (par défaut), sans aucune expression régulière :
+  - des **règles prêtes à l'emploi**, activées d'un interrupteur : jamais de commit ni de PR
+    signé Claude, me demander avant chaque `git push`, bloquer les push forcés, me demander
+    avant de supprimer des fichiers, de modifier un `.env` ou d'installer des paquets ;
+  - un **constructeur en phrase** : « Quand Claude veut [pousser du code / lancer une commande
+    contenant… / modifier un fichier dont le chemin contient… / utiliser un outil MCP…]
+    alors [le bloquer / me demander / l'autoriser / lui rappeler une consigne] ». Le texte
+    saisi est pris tel quel ;
+  - vos règles, affichées en phrases.
+- **Mode avancé** : chaque règle vise un **outil** (expression régulière : `Bash`,
+  `Write|Edit`, `mcp__.*`), un **champ** (commande, chemin du fichier, texte écrit, ou toute
+  l'entrée) et un **motif** (expression régulière, insensible à la casse). **Tester une
+  action** montre ce que le hook répondrait, sans rien exécuter. Une règle simple modifiée
+  ici devient une règle avancée.
+- Si plusieurs règles correspondent, la décision la plus stricte l'emporte (refuser >
+  demander > autoriser).
+- Un hook ne voit que la commande, pas le contenu des commits déjà faits. « Ne jamais pousser
+  sur GitHub au nom de Claude » se traduit donc par « Jamais de commit ni de PR signé
+  Claude » : ce qui est signé Claude ne peut plus être créé, donc plus être poussé.
+- Les règles sont stockées dans `contexte/.regles.yml` et versionnées avec le reste
+  (historique, sauvegarde).
+- **Installation, une fois par poste** (encadré *Activer sur un poste* de la page) : un seul
+  hook `PreToolUse` de type `mcp_tool`, qui appelle l'outil `controler_action` du serveur avant
+  chaque action. Ensuite, toute modification dans l'interface s'applique immédiatement, sans
+  toucher aux postes.
+  1. **Nom du serveur** : `claude mcp list` ; le nom est ce qui précède les deux-points
+     (`mcp-memory: https://…/mcp (HTTP) - ✔ Connected`). Le saisir dans la page : le bloc se
+     met à jour (champ `server`).
+  2. **Portée** : `claude mcp get <nom>` doit afficher `Scope: User config`. Sinon, le
+     réenregistrer avec `--scope user` (voir *Claude Code (accès global, une seule commande)*) :
+     dans les autres projets, le hook ne trouverait pas le serveur et laisserait tout passer.
+  3. **Copier le bloc** et le fusionner dans `~/.claude/settings.json`, à côté des hooks
+     existants.
+  4. **Vérifier** : `/hooks` dans Claude Code liste le hook ; avec la règle « Me demander avant
+     chaque git push » active, demander à Claude d'exécuter `echo git push` (sans effet) : une
+     demande de confirmation doit apparaître.
+
+  Le bloc est fixe (`"matcher": "*"`) : le serveur est consulté avant chaque action (un
+  aller-retour réseau, quelques millisecondes sur un réseau local), et toute règle ajoutée
+  s'applique sans rien recopier.
+- `onFailure: "continue"` (par défaut) : si le serveur est injoignable, l'action suit le
+  circuit normal des permissions. Pour les règles critiques, gardez aussi un réglage ou un
+  hook local (voir *Imposer une règle dans Claude Code*).
+- Les hooks n'existent que dans Claude Code ; pour claude.ai et Claude Desktop, utilisez les
+  *Directives globales*.
+
 ### Outils MCP
 `vue_ensemble` (à appeler en premier), `lister_projets`, `lister_documents`, `plan_document`,
 `lire_document`, `rechercher`, `ecrire_document`, `ajouter_au_document`, `remplacer_texte`,
-`deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`.
+`deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`, et
+`controler_action`, réservé au hook de la page **Hooks**.
 `creer_projet` crée un projet, ou un sous-projet avec `parent`. Les consignes demandent à
 Claude de le proposer (identifiant, titre, documents à y déplacer) et de n'appeler l'outil
 qu'après votre accord. Dans Claude Code, ne l'ajoutez pas aux outils autorisés d'office : la
@@ -372,10 +426,11 @@ critiques s'imposent par les réglages (`~/.claude/settings.json`, à fusionner 
 - `permissions.ask` : tout `git push` demande confirmation, même s'il figure ailleurs dans
   la liste `allow` (retirez-l'en au passage).
 
-Pour aller plus loin, un **hook** `PreToolUse` sur `Bash` peut refuser une commande avant
-son exécution, par exemple un commit dont le message contient une signature Claude
-(réponse `permissionDecision: "deny"`) ou un `git push` (réponse `"ask"`). Ces mécanismes
-ne concernent que Claude Code : pour les autres clients, seules les directives s'appliquent.
+Pour aller plus loin, la page **Hooks** de l'interface administre des règles évaluées par le
+serveur avant chaque action (voir *Hooks*). Un hook local (`PreToolUse` sur `Bash`, script sur
+le poste) reste utile en filet pour les règles critiques : il s'applique même quand le serveur
+est injoignable. Ces mécanismes ne concernent que Claude Code : pour les autres clients,
+seules les directives s'appliquent.
 
 ## Sauvegarde et restauration
 
