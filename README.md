@@ -151,13 +151,15 @@ avant toute écriture dans un `.env`.
 ### Outils MCP
 `vue_ensemble` (à appeler en premier), `lister_projets`, `lister_documents`, `plan_document`,
 `lire_document`, `rechercher`, `ecrire_document`, `ajouter_au_document`, `remplacer_texte`,
-`deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`, et
+`deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`, `lire_version`, et
 `controler_action`, réservé au hook de **Claude › Hooks**.
 `creer_projet` crée un projet, ou un sous-projet avec `parent`. Les consignes demandent à
 Claude de le proposer (identifiant, titre, documents à y déplacer) et de n'appeler l'outil
 qu'après votre accord. Dans Claude Code, ne l'ajoutez pas aux outils autorisés d'office : la
-demande de permission sert alors de confirmation. Renommage et suppression de projet,
-restauration d'une version : interface web.
+demande de permission sert alors de confirmation.
+`lire_version` relit une ancienne version (identifiant donné par `historique`) sans rien modifier.
+Renommage et suppression de projet, suppression de document, restauration d'une version :
+interface web uniquement.
 
 **Économie de tokens.** Les documents longs ne sont pas renvoyés en entier :
 - l'index (`vue_ensemble`, filtrable par `projet`) affiche la taille estimée de chaque document ;

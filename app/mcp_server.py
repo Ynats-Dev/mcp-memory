@@ -419,6 +419,26 @@ def historique(chemin: str | None = None, limite: int = 20) -> str:
 
 
 @mcp.tool(structured_output=False)
+@usage.journaliser
+def lire_version(chemin: str, version: str, section: str | None = None, complet: bool = False) -> str:
+    """Lit une ancienne version d'un document (version : identifiant donné par historique), sans rien modifier.
+    section et complet : comme lire_document. Restauration : par l'utilisateur, dans l'interface web."""
+    doc = store.lire_version(chemin, version)
+    entete = f"_chemin : {doc.chemin} · version {version} (pas forcément l'état actuel) · maj : {doc.maj}_"
+    if section:
+        try:
+            s = sec.trouver(doc.contenu, section)
+        except LookupError as e:
+            raise ErreurContexte(str(e)) from None
+        return f"# {doc.titre} › {s.numero} {s.titre}\n{entete}\n\n{sec.texte(doc.contenu, s)}"
+    if not complet and sec.tokens(doc.contenu) > SEUIL_COMPLET:
+        return (f"Version longue ({sec.taille(doc.contenu)}) : lire la section utile avec "
+                f"`lire_version(chemin, version, section=…)`, ou tout avec `complet=true`.\n\n"
+                f"# {doc.titre}\n{entete}\n\n{sec.plan(doc.contenu)}")
+    return f"# {doc.titre}\n{entete}\n\n{doc.contenu}"
+
+
+@mcp.tool(structured_output=False)
 def controler_action(outil: str, commande: str = "", fichier: str = "", contenu: str = "",
                      nouveau: str = "") -> str:
     """Réservé au hook Claude Code (règles administrées dans l'interface) : ne pas appeler soi-même."""
