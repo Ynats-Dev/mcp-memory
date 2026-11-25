@@ -60,6 +60,13 @@ SIGNATURE = (r"(git\b.*\b(commit|tag|notes|merge|rebase)|gh\s+(pr|issue|release)
              r"(co-authored-by:[^\n]*(claude|anthropic)|generated with \[?claude|noreply@anthropic\.com"
              r"|--author[= ]+[\"']?[^\"']*claude)")
 ECRITURE = "Write|Edit|MultiEdit|NotebookEdit"
+# Message de commit qui commence (après un éventuel préfixe « feat: ») par un verbe anglais courant :
+# après -m / --message, ou en première ligne d'un heredoc (-F - <<'EOF').
+COMMIT_ANGLAIS = (r"\bgit\b[\s\S]*?\bcommit\b[\s\S]*?(\s-[a-zA-Z]*m\s*|--message[= ]|<<-?\s*['\"]?\w+['\"]?\s*\n)\s*[\"']?"
+                  r"((feat|fix|docs|chore|refactor|style|test|perf|ci|build)(\([^)]*\))?!?:\s*)?"
+                  r"(add|adds|added|fix|fixes|fixed|update|updates|updated|remove|removes|removed|refactor|"
+                  r"implement|implements|improve|improves|create|creates|delete|deletes|bump|revert|rename|"
+                  r"move|use|make|allow|enable|disable|handle|prevent|ensure|introduce|initial)\b")
 ACTIONS = {
     "push": {"libelle": "pousser du code (git push)", "cible": "vers un dépôt contenant", "cible_facultative": True,
              "outil": "Bash", "champ": "commande", "motif": PUSH},
@@ -67,6 +74,8 @@ ACTIONS = {
                    "champ": "commande", "motif": PUSH_BASE + r"(\s.*)?\s(--force\S*|-f|\+\S+)(\s|$)"},
     "signature": {"libelle": "signer un commit ou une PR au nom de Claude", "cible": None, "outil": "Bash",
                   "champ": "commande", "motif": SIGNATURE},
+    "commit-anglais": {"libelle": "écrire un message de commit en anglais", "cible": None, "outil": "Bash",
+                       "champ": "commande", "motif": COMMIT_ANGLAIS},
     "commande": {"libelle": "lancer une commande contenant", "cible": "texte de la commande", "outil": "Bash",
                  "champ": "commande", "motif": ""},
     "suppression": {"libelle": "supprimer des fichiers (rm)", "cible": None, "outil": "Bash",
@@ -93,6 +102,10 @@ MODELES = [
      "l'utilisateur, jamais au nom de Claude. Retirer « Co-Authored-By: Claude », « Generated with Claude "
      "Code » ou l'auteur Claude, puis relancer.",
      "aide": "Ce qui part sur GitHub ou ailleurs reste à votre nom."},
+    {"id": "commit-langue", "nom": "Messages de commit toujours dans ma langue", "action": "commit-anglais",
+     "decision": "deny", "message": "Directive globale : les messages de commit (et descriptions de PR) "
+     "sont rédigés dans la langue de l'utilisateur (français). Réécrire le message en français, puis relancer.",
+     "aide": "Un message de commit en anglais (« Add… », « feat: Fix… ») est refusé et réécrit."},
     {"id": "git-push", "nom": "Me demander avant chaque git push", "action": "push", "decision": "ask",
      "message": "Directive globale : aucun git push sans l'accord explicite de l'utilisateur.",
      "aide": "Rien n'est publié sans votre accord."},

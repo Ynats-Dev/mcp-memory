@@ -87,7 +87,8 @@ avant toute écriture dans un `.env`.
 
 - **Mode simple** (par défaut), sans aucune expression régulière :
   - des **règles prêtes à l'emploi**, activées d'un interrupteur : jamais de commit ni de PR
-    signé Claude, me demander avant chaque `git push`, bloquer les push forcés, me demander
+    signé Claude, messages de commit toujours dans ma langue (un message en anglais est refusé),
+    me demander avant chaque `git push`, bloquer les push forcés, me demander
     avant de supprimer des fichiers, de modifier un `.env` ou d'installer des paquets ;
   - un **constructeur en phrase** : « Quand Claude veut [pousser du code / lancer une commande
     contenant… / modifier un fichier dont le chemin contient… / utiliser un outil MCP…]
@@ -271,6 +272,23 @@ La page **Connexion Claude** de l'interface web permet d'enregistrer le jeton
 (`MCP_TOKEN`) **dans le navigateur** (localStorage, jamais côté serveur), de le
 vérifier auprès du serveur MCP, et de copier les configurations Claude Desktop /
 Claude Code déjà remplies.
+
+### Claude Code : le plus simple
+
+Ouvrir Claude Code sur le poste et lui demander :
+
+```text
+Installe MCP Memory sur ce poste en suivant https://mcp.example.com/claude-code/installation
+```
+
+Le serveur publie à cette adresse (sans authentification : elle ne contient aucun secret) une
+procédure écrite pour Claude. Claude enregistre le serveur en vous demandant le jeton, installe
+le hook global de la page **Hooks**, ajoute deux filets locaux (`verif-mcp.sh` prévient Claude
+quand le serveur est injoignable ; `garde-git.sh` applique les règles Git même serveur éteint
+et affiche le détail de chaque push — dépôt, branches, commits envoyés — dans la demande de
+confirmation),
+règle l'attribution et la confirmation des `git push`, puis vérifie le tout. La page **Connexion
+Claude** affiche cette phrase avec la bonne adresse si `MCP_PUBLIC_URL` est renseigné.
 
 ### Claude Code (accès global, une seule commande)
 

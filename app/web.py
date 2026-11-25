@@ -23,6 +23,7 @@ from markupsafe import Markup, escape
 import json
 
 from . import fichier_projet, indicateurs, maj, regles, sauvegarde, usage
+from .installation import CHEMIN as CHEMIN_INSTALLATION, procedure as procedure_installation
 from .sections import taille as taille_tokens
 from .compte import COOKIE, Comptes, ErreurCompte
 from .importer import nom_document
@@ -142,6 +143,22 @@ def apercu(contenu: str, longueur: int = 150) -> str:
 
 templates.env.filters["apercu"] = apercu
 templates.env.globals["utilisateur_courant"] = lambda request: getattr(request.state, "user", "")
+def base_mcp(request: Request) -> str:
+    """Adresse du serveur MCP sans « /mcp ». MCP_PUBLIC_URL s'il est renseigné ; sinon l'adresse de
+    cette interface (reverse proxy qui sert /mcp et l'interface sous le même nom), le port 8766
+    devenant 8765 en accès direct."""
+    if URL_MCP:
+        return URL_MCP.removesuffix("/mcp")
+    h = request.headers
+    proto = (h.get("x-forwarded-proto") or request.url.scheme).split(",")[0].strip()
+    hote = (h.get("x-forwarded-host") or h.get("host") or request.url.netloc).split(",")[0].strip()
+    if hote.endswith(":8766"):
+        hote = hote[:-5] + ":8765"
+    return f"{proto}://{hote}"
+
+
+# Procédure d'installation d'un poste Claude Code (app/installation.py)
+templates.env.globals["url_installation"] = lambda request: base_mcp(request) + CHEMIN_INSTALLATION
 
 # Pages accessibles sans session (le reste redirige vers /connexion)
 PUBLIQUES = {"/sante", "/connexion", "/installation"}
@@ -150,7 +167,7 @@ PUBLIQUES = {"/sante", "/connexion", "/installation"}
 @app.middleware("http")
 async def authentification(request: Request, call_next):
     chemin = request.url.path
-    if chemin.startswith("/static/") or chemin == "/sante":
+    if chemin.startswith("/static/") or chemin in ("/sante", CHEMIN_INSTALLATION):
         return await call_next(request)
     if not comptes.existe():
         if chemin == "/installation":
@@ -276,6 +293,13 @@ def changer_mdp(request: Request, ancien: str = Form(...), mdp: str = Form(...),
     # le secret a changé : nouvelle session pour ce navigateur, les autres sont déconnectés
     return _avec_session(request, RedirectResponse(f"/compte?msg={quote('Mot de passe modifié')}", status_code=303),
                          longue=True)
+
+
+@app.get(CHEMIN_INSTALLATION, include_in_schema=False)
+def installation_poste(request: Request):
+    """Procédure d'installation d'un poste Claude Code, publique (aucun secret). Aussi servie par le
+    serveur MCP : un reverse proxy qui n'envoie que /mcp au serveur MCP la sert donc quand même."""
+    return PlainTextResponse(procedure_installation(base_mcp(request)), media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/sante", include_in_schema=False)

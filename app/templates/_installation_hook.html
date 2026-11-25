@@ -3,6 +3,11 @@
   <summary><h2 style="display:inline">Activer sur un poste (une seule fois)</h2></summary>
   <p>Un seul hook, posé une fois dans <code>~/.claude/settings.json</code> : avant chaque action, Claude Code
      interroge ce serveur, qui applique les règles de cette page. Ensuite, tout se règle ici.</p>
+  <p><strong>Le plus simple :</strong> demander à Claude Code sur le poste
+     « <code>Installe MCP Memory sur ce poste en suivant {{ url_installation(request) }}</code> ».
+     Il enregistre le serveur si besoin, installe ce hook ainsi que deux filets locaux (avertissement si le
+     serveur est injoignable, règles Git appliquées même serveur éteint) et vérifie le tout.
+     Sinon, à la main :</p>
   <ol class="etapes">
     <li><strong>Nom du serveur.</strong> Dans un terminal : <code>claude mcp list</code>. Le nom est ce qui
       précède les deux-points (<code>mcp-memory: https://…/mcp (HTTP) - ✔ Connected</code>). Le reporter ici :

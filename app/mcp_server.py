@@ -20,7 +20,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 
-from . import regles
+from . import installation, regles
 from . import sections as sec
 from . import usage
 from .store import DOC_DIRECTIVES, PROJET_PROCEDURES, Document, ErreurContexte, Store, empreinte, plier
@@ -136,6 +136,19 @@ mcp._mcp_server.__class__ = _ServeurInstructionsDynamiques
 @mcp.custom_route("/sante", methods=["GET"])
 async def sante(request: Request) -> PlainTextResponse:
     return PlainTextResponse("ok")
+
+
+@mcp.custom_route(installation.CHEMIN, methods=["GET"])
+async def installation_poste(request: Request) -> PlainTextResponse:
+    """Procédure d'installation d'un poste Claude Code (sans secret : publique, comme /sante)."""
+    if URL_PUBLIQUE:
+        base = URL_PUBLIQUE
+    else:  # adresse vue par le client, derrière un éventuel reverse proxy
+        h = request.headers
+        proto = (h.get("x-forwarded-proto") or request.url.scheme).split(",")[0].strip()
+        hote = (h.get("x-forwarded-host") or h.get("host") or request.url.netloc).split(",")[0].strip()
+        base = f"{proto}://{hote}"
+    return PlainTextResponse(installation.procedure(base), media_type="text/markdown; charset=utf-8")
 
 
 if fournisseur:
@@ -470,7 +483,7 @@ class AuthBearer:
         self.jeton = jeton.encode()
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] != "/sante":
+        if scope["type"] == "http" and scope["path"] not in ("/sante", installation.CHEMIN):
             entetes = dict(scope.get("headers") or [])
             valeur = entetes.get(b"authorization", b"")
             fourni = valeur[7:].strip() if valeur[:7].lower() == b"bearer " else b""

@@ -52,7 +52,13 @@
   <p class="note">Démarrage plus rapide : <code>npm i -g mcp-remote</code>, puis remplacer
      <code>"command": "npx"</code> par le chemin de <code>mcp-remote</code> (<code>which mcp-remote</code>)
      et retirer <code>"-y", "mcp-remote",</code> des arguments.</p>
-  <p><strong>Claude Code</strong></p>
+  <p><strong>Claude Code — le plus simple :</strong> ouvrir Claude Code sur le poste et lui demander
+     (il enregistre le serveur en vous demandant le jeton, pose les hooks et vérifie le tout) :</p>
+  <div class="bloc-copie">
+    <button type="button" class="copier" data-cible="demande-installation">Copier</button>
+<pre id="demande-installation">Installe MCP Memory sur ce poste en suivant {{ url_installation(request) }}</pre>
+  </div>
+  <p><strong>Claude Code — à la main</strong> (serveur seul, sans les hooks) :</p>
   <div class="bloc-copie">
     <button type="button" class="copier" data-cible="conf-code">Copier</button>
 <pre id="conf-code">claude mcp add --transport http --scope user mcp-memory {{ url }} \
