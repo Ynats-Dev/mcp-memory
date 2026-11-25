@@ -1,0 +1,33 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte" id="sauvegarde">
+  <h2>Sauvegarde Git</h2>
+  {% if not sauvegarde.configuree %}
+    <p><span class="pastille ko">Non configurée</span> Aucune copie hors du serveur. Renseigner dans le <code>.env</code> du serveur
+      <code>GIT_REMOTE</code> (adresse d'un dépôt <strong>vide</strong>, sans identifiants), <code>GIT_REMOTE_USER</code> et
+      <code>GIT_REMOTE_TOKEN</code>, puis <code>docker compose up -d</code>.</p>
+    <p><a class="bouton" href="/export">Exporter tout (.zip)</a></p>
+  {% else %}
+    <dl class="maj-versions">
+      <dt>Dépôt</dt><dd><code>{{ sauvegarde.remote }}</code>{% if not sauvegarde.identifiants %} <span class="note">(sans identifiants)</span>{% endif %}</dd>
+      <dt>Planification</dt><dd>chaque nuit à {{ sauvegarde.heure }}</dd>
+      <dt>Dernière tentative</dt><dd>{% if sauvegarde.date %}{{ sauvegarde.date|date_fr }} —
+        {% if sauvegarde.ok %}<span class="pastille ok">réussie</span>{% else %}<span class="pastille ko">échec</span>{% endif %}
+        <span class="note">({{ sauvegarde.commits }} versions, {{ sauvegarde.duree }} s)</span>{% else %}jamais{% endif %}</dd>
+      <dt>Dernière réussite</dt><dd>{{ sauvegarde.derniere_reussite|date_fr if sauvegarde.derniere_reussite else 'jamais' }}
+        {% if sauvegarde.en_retard %}<span class="pastille ko">plus de 26 h</span>{% endif %}</dd>
+    </dl>
+    {% if sauvegarde.date and not sauvegarde.ok %}<p class="alerte"><span>{{ sauvegarde.message }}</span></p>{% endif %}
+    <div class="actions"><form method="post" action="/memoire/sauvegarde"><button>Sauvegarder maintenant</button></form>
+      <a class="bouton" href="/export">Exporter tout (.zip)</a></div>
+    <p class="note">Contenu sauvegardé : les documents et tout leur historique (dépôt Git). Le compte de l'interface n'y est pas (il se recrée).</p>
+  {% endif %}
+</section>
+
+<section class="carte">
+  <h2>Export</h2>
+  <p>Archive <code>.zip</code> de tous les documents (avec leur en-tête titre / tags / date), archives comprises.
+     Un projet seul s'exporte depuis sa page.</p>
+  <div class="actions"><a class="bouton" href="/export">Exporter tout (.zip)</a></div>
+</section>
+{% endblock %}

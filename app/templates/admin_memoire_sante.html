@@ -1,0 +1,18 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte">
+  <h2>Points à corriger et conseils</h2>
+  {% for p in projets if p.alertes %}
+    <h3 id="sante-{{ p.slug }}" class="sante-projet">{{ p.titre }}</h3>
+    <ul class="sante">
+    {% for a in p.alertes %}
+      <li class="{{ a.niveau }}"><span class="pastille {{ 'ko' if a.niveau == 'important' else 'dispo' }}">{{ 'À corriger' if a.niveau == 'important' else 'Conseil' }}</span>
+        <a href="/doc/{{ a.chemin }}"><code>{{ a.chemin }}</code></a> : {{ a.message }}</li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p><span class="pastille ok">OK</span> Aucun point à signaler.</p>
+  {% endfor %}
+  <p class="note">Contrôles : fiche résumé présente et courte, documents longs découpés en sections, sections de moins de ~3k tokens, pas de dérive en journal (« 🆕 », titres datés, tâches cochées accumulées), renvois entre documents valides. Les archives ne sont pas contrôlées.</p>
+</section>
+{% endblock %}

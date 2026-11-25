@@ -201,6 +201,68 @@ def rendu(request: Request, nom: str, **ctx) -> HTMLResponse:
     return templates.TemplateResponse(request, nom, ctx)
 
 
+# ------------------------------------------------------------------ espaces et onglets
+# Trois espaces (Claude, Connexion, Administration), chacun avec ses onglets et parfois des
+# sous-onglets ; une adresse par onglet. Contexte (accueil, projets) reste hors de ce schéma.
+ESPACES = {
+    "claude": {
+        "titre": "Claude", "url": "/claude",
+        "onglets": [("directives", "Directives", "/claude/directives"),
+                    ("procedures", "Procédures", "/claude/procedures"),
+                    ("hooks", "Hooks", "/claude/hooks")],
+    },
+    "connexion": {
+        "titre": "Connexion", "url": "/clients",
+        "onglets": [("claude-code", "Claude Code", "/clients/claude-code"),
+                    ("desktop", "Claude Desktop", "/clients/desktop"),
+                    ("claude-ai", "claude.ai", "/clients/claude-ai"),
+                    ("projet", "Projet Claude", "/clients/projet"),
+                    ("jeton", "Jeton", "/clients/jeton")],
+    },
+    "admin": {
+        "titre": "Administration", "url": "/admin",
+        "onglets": [("memoire", "Mémoire", "/admin/memoire"),
+                    ("historique", "Historique", "/admin/historique"),
+                    ("sauvegarde", "Sauvegarde", "/admin/sauvegarde"),
+                    ("mise-a-jour", "Mise à jour", "/admin/mise-a-jour"),
+                    ("compte", "Compte", "/admin/compte")],
+    },
+}
+SOUS_ONGLETS = {
+    ("claude", "hooks"): [("modeles", "Règles prêtes à l'emploi", "/claude/hooks"),
+                          ("mes-regles", "Mes règles", "/claude/hooks/mes-regles"),
+                          ("avance", "Avancé", "/claude/hooks/avance"),
+                          ("tester", "Tester", "/claude/hooks/tester")],
+    ("admin", "memoire"): [("vue", "Vue d'ensemble", "/admin/memoire"),
+                           ("sante", "Santé", "/admin/memoire/sante"),
+                           ("usage", "Usage par Claude", "/admin/memoire/usage")],
+    ("admin", "mise-a-jour"): [("version", "Version", "/admin/mise-a-jour"),
+                               ("depot", "Dépôt de référence", "/admin/mise-a-jour/depot"),
+                               ("journal", "Journal", "/admin/mise-a-jour/journal")],
+}
+
+
+def rendu_espace(request: Request, gabarit: str, espace: str, onglet: str, sous_onglet: str = "",
+                 sous_titre: str = "", **ctx) -> HTMLResponse:
+    """Page d'un onglet : navigation de l'espace (onglets, sous-onglets) + contenu."""
+    e = ESPACES[espace]
+    titre_onglet = next(lib for cle, lib, _ in e["onglets"] if cle == onglet)
+    sous = SOUS_ONGLETS.get((espace, onglet), [])
+    nav = dict(espace=espace, titre=e["titre"], onglets=e["onglets"], onglet=onglet, titre_onglet=titre_onglet,
+               sous_onglets=sous, sous_onglet=sous_onglet or (sous[0][0] if sous else ""), sous_titre=sous_titre)
+    ctx.setdefault("msg", "")
+    ctx.setdefault("erreur", "")
+    return rendu(request, gabarit, nav_espace=nav, **ctx)
+
+
+def vers(url: str, **params) -> RedirectResponse:
+    """Redirection 303 vers une page, avec message éventuel (msg=…, erreur=…) et ancre (ancre=…)."""
+    ancre = params.pop("ancre", "")
+    params = {k: v for k, v in params.items() if v}
+    return RedirectResponse(url + (f"?{urlencode(params)}" if params else "") + (f"#{ancre}" if ancre else ""),
+                            status_code=303)
+
+
 def vers_doc(chemin: str, **params) -> RedirectResponse:
     url = f"/doc/{quote(chemin)}"
     if params:
@@ -278,9 +340,24 @@ def deconnexion():
     return reponse
 
 
-@app.get("/compte", response_class=HTMLResponse)
+@app.get("/admin", include_in_schema=False)
+def espace_admin(user: str = Depends(utilisateur)):
+    return vers("/admin/memoire")
+
+
+def _compte(request: Request, msg: str = "", erreur: str = ""):
+    return rendu_espace(request, "admin_compte.html", "admin", "compte", msg=msg, erreur=erreur,
+                        sous_titre=f"Connecté en tant que {getattr(request.state, 'user', '')}.")
+
+
+@app.get("/admin/compte", response_class=HTMLResponse)
 def compte_page(request: Request, msg: str = "", user: str = Depends(utilisateur)):
-    return rendu(request, "compte.html", msg=msg, erreur="")
+    return _compte(request, msg)
+
+
+@app.get("/compte", include_in_schema=False)
+def ancienne_page_compte(msg: str = "", user: str = Depends(utilisateur)):
+    return vers("/admin/compte", msg=msg)
 
 
 @app.post("/compte/mot-de-passe", dependencies=[Depends(meme_origine)])
@@ -289,9 +366,9 @@ def changer_mdp(request: Request, ancien: str = Form(...), mdp: str = Form(...),
     try:
         comptes.changer_mdp(ancien, mdp, confirmation)
     except ErreurCompte as e:
-        return rendu(request, "compte.html", msg="", erreur=str(e))
+        return _compte(request, erreur=str(e))
     # le secret a changé : nouvelle session pour ce navigateur, les autres sont déconnectés
-    return _avec_session(request, RedirectResponse(f"/compte?msg={quote('Mot de passe modifié')}", status_code=303),
+    return _avec_session(request, vers("/admin/compte", msg="Mot de passe modifié"),
                          longue=True)
 
 
@@ -309,16 +386,43 @@ def sante():
 
 # ------------------------------------------------------------ mémoire : indicateurs et sauvegarde
 
-@app.get("/memoire", response_class=HTMLResponse)
-def memoire(request: Request, msg: str = "", jours: int = 30, user: str = Depends(utilisateur)):
-    jours = jours if jours in (1, 7, 30, 90, 365) else 30
+SOUS_TITRE_MEMOIRE = "Ce que Claude charge : volumes en tokens (3,5 caractères par token), santé et usage."
+
+
+@app.get("/admin/memoire", response_class=HTMLResponse)
+def memoire(request: Request, msg: str = "", user: str = Depends(utilisateur)):
     projets = indicateurs.analyser(store)
     tous = [d for p in projets for d in p.docs]
-    return rendu(request, "memoire.html", projets=projets, msg=msg,
-                 total_docs=len(tous), total_actifs=sum(p.tokens_actifs for p in projets),
-                 total_archives=sum(p.tokens_archives for p in projets),
-                 plus_gros=sorted((d for d in tous if not d.archive), key=lambda d: -d.tokens)[:8],
-                 sauvegarde=sauvegarde.etat(store), usage=usage.synthese(jours))
+    return rendu_espace(request, "admin_memoire_vue.html", "admin", "memoire", "vue", msg=msg, projets=projets,
+                        total_docs=len(tous), total_actifs=sum(p.tokens_actifs for p in projets),
+                        total_archives=sum(p.tokens_archives for p in projets),
+                        plus_gros=sorted((d for d in tous if not d.archive), key=lambda d: -d.tokens)[:8],
+                        sous_titre=SOUS_TITRE_MEMOIRE)
+
+
+@app.get("/admin/memoire/sante", response_class=HTMLResponse)
+def memoire_sante(request: Request, user: str = Depends(utilisateur)):
+    return rendu_espace(request, "admin_memoire_sante.html", "admin", "memoire", "sante",
+                        projets=indicateurs.analyser(store), sous_titre=SOUS_TITRE_MEMOIRE)
+
+
+@app.get("/admin/memoire/usage", response_class=HTMLResponse)
+def memoire_usage(request: Request, jours: int = 30, user: str = Depends(utilisateur)):
+    jours = jours if jours in (1, 7, 30, 90, 365) else 30
+    return rendu_espace(request, "admin_memoire_usage.html", "admin", "memoire", "usage",
+                        usage=usage.synthese(jours), sous_titre=SOUS_TITRE_MEMOIRE)
+
+
+@app.get("/memoire", include_in_schema=False)
+def ancienne_page_memoire(jours: int = 0, msg: str = "", user: str = Depends(utilisateur)):
+    return vers("/admin/memoire/usage", jours=jours) if jours else vers("/admin/memoire", msg=msg)
+
+
+@app.get("/admin/sauvegarde", response_class=HTMLResponse)
+def page_sauvegarde(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    return rendu_espace(request, "admin_sauvegarde.html", "admin", "sauvegarde", msg=msg,
+                        sauvegarde=sauvegarde.etat(store),
+                        sous_titre="Copie nocturne du contexte vers un dépôt Git, et export.")
 
 
 def _zip(dossiers: list[Path], nom: str) -> Response:
@@ -351,13 +455,34 @@ def exporter_projet(slug: str, user: str = Depends(utilisateur)):
 @app.post("/memoire/sauvegarde", dependencies=[Depends(meme_origine)])
 def sauvegarder_maintenant(user: str = Depends(utilisateur)):
     r = sauvegarde.sauvegarder(store)
-    return RedirectResponse(f"/memoire?msg={quote(r['message'][:300])}", status_code=303)
+    return vers("/admin/sauvegarde", msg=r["message"][:300])
 
 
 # ------------------------------------------------------------ mise à jour de l'application
-@app.get("/mise-a-jour", response_class=HTMLResponse)
-def mise_a_jour_page(request: Request, msg: str = "", erreur: str = "", user: str = Depends(utilisateur)):
-    return rendu(request, "maj.html", etat=maj.etat(), journal=maj.journal(), msg=msg, erreur=erreur)
+SOUS_TITRE_MAJ = "Compare la version en service au dépôt de référence, puis met à jour et redémarre en un clic."
+
+
+@app.get("/admin/mise-a-jour", response_class=HTMLResponse)
+def mise_a_jour_page(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    return rendu_espace(request, "admin_maj_version.html", "admin", "mise-a-jour", "version", msg=msg,
+                        etat=maj.etat(), sous_titre=SOUS_TITRE_MAJ)
+
+
+@app.get("/admin/mise-a-jour/depot", response_class=HTMLResponse)
+def mise_a_jour_depot_page(request: Request, msg: str = "", erreur: str = "", user: str = Depends(utilisateur)):
+    return rendu_espace(request, "admin_maj_depot.html", "admin", "mise-a-jour", "depot", msg=msg, erreur=erreur,
+                        etat=maj.etat(), sous_titre=SOUS_TITRE_MAJ)
+
+
+@app.get("/admin/mise-a-jour/journal", response_class=HTMLResponse)
+def mise_a_jour_journal(request: Request, user: str = Depends(utilisateur)):
+    return rendu_espace(request, "admin_maj_journal.html", "admin", "mise-a-jour", "journal",
+                        journal=maj.journal(lignes=400), sous_titre=SOUS_TITRE_MAJ)
+
+
+@app.get("/mise-a-jour", include_in_schema=False)
+def ancienne_page_maj(user: str = Depends(utilisateur)):
+    return vers("/admin/mise-a-jour")
 
 
 @app.get("/mise-a-jour/etat")
@@ -379,9 +504,9 @@ def mise_a_jour_depot(url: str = Form(""), branche: str = Form(""), user: str = 
     try:
         maj.enregistrer_config(url, branche)
     except (ValueError, RuntimeError) as e:
-        return RedirectResponse(f"/mise-a-jour?{urlencode({'erreur': str(e)})}#depot", status_code=303)
+        return vers("/admin/mise-a-jour/depot", erreur=str(e))
     msg = "Dépôt de référence enregistré." + _verifier_apres_config()
-    return RedirectResponse(f"/mise-a-jour?{urlencode({'msg': msg})}#depot", status_code=303)
+    return vers("/admin/mise-a-jour/depot", msg=msg)
 
 
 @app.post("/mise-a-jour/depot/defaut", dependencies=[Depends(meme_origine)])
@@ -389,9 +514,9 @@ def mise_a_jour_depot_defaut(user: str = Depends(utilisateur)):
     try:
         maj.reinitialiser_config()
     except RuntimeError as e:
-        return RedirectResponse(f"/mise-a-jour?{urlencode({'erreur': str(e)})}#depot", status_code=303)
+        return vers("/admin/mise-a-jour/depot", erreur=str(e))
     msg = "Dépôt par défaut rétabli." + _verifier_apres_config()
-    return RedirectResponse(f"/mise-a-jour?{urlencode({'msg': msg})}#depot", status_code=303)
+    return vers("/admin/mise-a-jour/depot", msg=msg)
 
 
 @app.post("/mise-a-jour/{action}", dependencies=[Depends(meme_origine)])
@@ -631,9 +756,12 @@ def supprimer_projet(slug: str, user: str = Depends(utilisateur)):
 
 # Déclarée après les routes /projet/<slug>/… : « {slug:path} » accepte aussi « maison/nas ».
 @app.get("/projet/{slug:path}", response_class=HTMLResponse)
-def voir_projet(request: Request, slug: str, msg: str = "", user: str = Depends(utilisateur)):
+def voir_projet(request: Request, slug: str, msg: str = "", onglet: str = "documents",
+                user: str = Depends(utilisateur)):
     projet = store.lire_projet(slug)
     parent = store.lire_projet(projet.parent) if projet.parent else None
+    onglets = ["documents", "resume", "fichiers", "parametres"] + ([] if parent else ["sous-projets"])
+    onglet = onglet if onglet in onglets else "documents"
     info = indicateurs.analyser_projet(store, projet.slug)
     lignes = sorted(info.directs if info else [], key=lambda i: i.doc.titre.lower())
     resume = info.resume if info else None
@@ -642,36 +770,79 @@ def voir_projet(request: Request, slug: str, msg: str = "", user: str = Depends(
     return rendu(request, "projet.html", projet=projet, parent=parent, docs=docs, msg=msg, info=info,
                  resume=resume, actifs=[i for i in lignes if not i.archive and i is not resume],
                  archives=[i for i in lignes if i.archive], infos_sous=sous,
-                 procedures=projet.slug == PROJET_PROCEDURES)
+                 procedures=projet.slug == PROJET_PROCEDURES, onglet=onglet)
 
 
-# ------------------------------------------------------------ règles (hooks Claude Code)
-def _page_regles(request: Request, msg: str = "", erreur: str = "", test: dict | None = None,
-                 mode: str = "simple", saisie: dict | None = None):
+# ------------------------------------------------------------ espace Claude : directives, procédures, hooks
+@app.get("/claude/directives", response_class=HTMLResponse)
+def claude_directives(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    doc = store.lire(DOC_DIRECTIVES) if store.existe(DOC_DIRECTIVES) else None
+    return rendu_espace(request, "claude_directives.html", "claude", "directives", msg=msg, directives=doc,
+                        taille=indicateurs.sec.tokens(doc.contenu) if doc else 0,
+                        sous_titre="Comment Claude se comporte, dans toutes les conversations.")
+
+
+@app.get("/claude/procedures", response_class=HTMLResponse)
+def claude_procedures(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    docs = [d for d in store.lister(PROJET_PROCEDURES) if not d.chemin.endswith("/resume")]
+    return rendu_espace(request, "claude_procedures.html", "claude", "procedures", msg=msg, procedures=docs,
+                        tailles={d.chemin: indicateurs.sec.tokens(d.contenu) for d in docs},
+                        sous_titre="Comment faire une tâche précise, étape par étape.")
+
+
+def _hooks(request: Request, sous: str, **ctx):
+    """Sous-onglet des Hooks : contexte commun (règles, libellés) + contexte propre."""
     liste = regles.lire(store)
-    config = json.dumps(regles.configuration_hook(), ensure_ascii=False, indent=2)
-    if mode != "avance":
-        par_id = {r.id: r for r in liste}
-        ids_modeles = {m["id"] for m in regles.MODELES}
-        return rendu(request, "regles_simple.html", msg=msg, erreur=erreur, config=config,
-                     modeles=[(m, par_id.get(m["id"])) for m in regles.MODELES],
-                     mes_regles=[r for r in liste if r.id not in ids_modeles], phrase=regles.phrase,
-                     actions=regles.ACTIONS, decisions=regles.DECISIONS_SIMPLES, saisie=saisie or {},
-                     installe=bool(liste))
-    return rendu(request, "regles.html", regles=liste, msg=msg, erreur=erreur, test=test or {},
-                 config=config, decisions=regles.DECISIONS, champs=regles.CHAMPS)
+    ids_modeles = {m["id"] for m in regles.MODELES}
+    par_id = {r.id: r for r in liste}
+    gabarit = {"modeles": "hooks_modeles.html", "mes-regles": "hooks_mes_regles.html",
+               "avance": "hooks_avance.html", "tester": "hooks_tester.html"}[sous]
+    simple = sous in ("modeles", "mes-regles")
+    ctx.setdefault("saisie", {})
+    ctx.setdefault("test", {})
+    return rendu_espace(request, gabarit, "claude", "hooks", sous, regles=liste,
+                        modeles=[(m, par_id.get(m["id"])) for m in regles.MODELES],
+                        mes_regles=[r for r in liste if r.id not in ids_modeles], phrase=regles.phrase,
+                        actions=regles.ACTIONS, champs=regles.CHAMPS,
+                        decisions=regles.DECISIONS_SIMPLES if simple else regles.DECISIONS,
+                        sous_titre="Ce que Claude Code a le droit de faire, vérifié avant chaque action.", **ctx)
 
 
-@app.get("/regles", response_class=HTMLResponse)
-def page_regles(request: Request, msg: str = "", erreur: str = "", mode: str = "simple", modifier: str = "",
-                user: str = Depends(utilisateur)):
-    saisie = None
-    if modifier:  # mode simple : constructeur prérempli
+@app.get("/claude/hooks", response_class=HTMLResponse)
+def hooks_modeles(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    return _hooks(request, "modeles", msg=msg)
+
+
+@app.get("/claude/hooks/mes-regles", response_class=HTMLResponse)
+def hooks_mes_regles(request: Request, msg: str = "", modifier: str = "", user: str = Depends(utilisateur)):
+    saisie = {}
+    if modifier:  # constructeur prérempli
         r = next((r for r in regles.lire(store) if r.id == modifier), None)
         if r and r.action:
             saisie = {"ancien_id": r.id, "action": r.action, "cible": r.cible, "decision": r.decision,
                       "message": r.message if r.message != f"Règle « {r.nom} »." else ""}
-    return _page_regles(request, msg, erreur, mode=mode, saisie=saisie)
+    return _hooks(request, "mes-regles", msg=msg, saisie=saisie)
+
+
+@app.get("/claude/hooks/avance", response_class=HTMLResponse)
+def hooks_avance(request: Request, msg: str = "", user: str = Depends(utilisateur)):
+    return _hooks(request, "avance", msg=msg)
+
+
+@app.get("/claude/hooks/tester", response_class=HTMLResponse)
+def hooks_tester(request: Request, user: str = Depends(utilisateur)):
+    return _hooks(request, "tester")
+
+
+@app.get("/regles", include_in_schema=False)
+def ancienne_page_regles(mode: str = "", modifier: str = "", user: str = Depends(utilisateur)):
+    if modifier:
+        return vers("/claude/hooks/mes-regles", modifier=modifier, ancre="creer")
+    return vers("/claude/hooks/avance" if mode == "avance" else "/claude/hooks")
+
+
+def _page_mode(mode: str) -> str:
+    return "/claude/hooks/avance" if mode == "avance" else "/claude/hooks/mes-regles"
 
 
 @app.post("/regles/simple", response_class=HTMLResponse, dependencies=[Depends(meme_origine)])
@@ -692,16 +863,14 @@ def regle_simple(request: Request, action: str = Form(""), cible: str = Form("")
             regle = regles.creer_simple(store, action, cible, decision, message, auteur=f"web:{user}")
     except ErreurContexte as e:
         saisie = dict(action=action, cible=cible, decision=decision, message=message, ancien_id=ancien_id)
-        return _page_regles(request, erreur=str(e), saisie=saisie)
-    return RedirectResponse(f"/regles?{urlencode({'msg': f'Règle enregistrée : {regles.phrase(regle)}.'})}"
-                            f"#r-{regle.id}", status_code=303)
+        return _hooks(request, "mes-regles", erreur=str(e), saisie=saisie)
+    return vers("/claude/hooks/mes-regles", msg=f"Règle enregistrée : {regles.phrase(regle)}.", ancre=f"r-{regle.id}")
 
 
 @app.post("/regles/modele/{id_}", dependencies=[Depends(meme_origine)])
 def regle_modele(id_: str, user: str = Depends(utilisateur)):
     r = regles.basculer_modele(store, id_, auteur=f"web:{user}")
-    msg = f"« {r.nom} » {'activée' if r.actif else 'désactivée'}."
-    return RedirectResponse(f"/regles?{urlencode({'msg': msg})}#modeles", status_code=303)
+    return vers("/claude/hooks", msg=f"« {r.nom} » {'activée' if r.actif else 'désactivée'}.", ancre=f"r-{r.id}")
 
 
 @app.get("/regles/nouvelle", response_class=HTMLResponse)
@@ -729,21 +898,19 @@ def enregistrer_regle(request: Request, ancien_id: str = Form(""), id_: str = Fo
     except ErreurContexte as e:  # réafficher le formulaire sans perdre la saisie
         return rendu(request, "regle_form.html", regle=regles.Regle(**donnees), ancien_id=ancien_id,
                      erreur=str(e), decisions=regles.DECISIONS, champs=regles.CHAMPS)
-    return RedirectResponse(f"/regles?{urlencode({'msg': f'Règle « {regle.nom} » enregistrée.', 'mode': 'avance'})}"
-                            f"#r-{regle.id}", status_code=303)
+    return vers("/claude/hooks/avance", msg=f"Règle « {regle.nom} » enregistrée.", ancre=f"r-{regle.id}")
 
 
 @app.post("/regles/{id_}/basculer", dependencies=[Depends(meme_origine)])
 def basculer_regle(id_: str, mode: str = Form("simple"), user: str = Depends(utilisateur)):
     r = regles.basculer(store, id_, auteur=f"web:{user}")
-    msg = f"Règle « {r.nom} » {'activée' if r.actif else 'désactivée'}."
-    return RedirectResponse(f"/regles?{urlencode({'msg': msg, 'mode': mode})}#r-{r.id}", status_code=303)
+    return vers(_page_mode(mode), msg=f"Règle « {r.nom} » {'activée' if r.actif else 'désactivée'}.", ancre=f"r-{r.id}")
 
 
 @app.post("/regles/{id_}/supprimer", dependencies=[Depends(meme_origine)])
 def supprimer_regle(id_: str, mode: str = Form("simple"), user: str = Depends(utilisateur)):
     regles.supprimer(store, id_, auteur=f"web:{user}")
-    return RedirectResponse(f"/regles?{urlencode({'msg': 'Règle supprimée.', 'mode': mode})}", status_code=303)
+    return vers(_page_mode(mode), msg="Règle supprimée.")
 
 
 @app.post("/regles/ordre", dependencies=[Depends(meme_origine)])
@@ -762,7 +929,7 @@ async def ordonner_regles(request: Request, user: str = Depends(utilisateur)):
 def regles_git(user: str = Depends(utilisateur)):
     n = regles.ajouter_regles_git(store, auteur=f"web:{user}")
     msg = f"{n} règle(s) Git ajoutée(s)." if n else "Les règles Git recommandées sont déjà présentes."
-    return RedirectResponse(f"/regles?{urlencode({'msg': msg, 'mode': 'avance'})}", status_code=303)
+    return vers("/claude/hooks/avance", msg=msg)
 
 
 @app.post("/regles/tester", response_class=HTMLResponse, dependencies=[Depends(meme_origine)])
@@ -774,12 +941,18 @@ def tester_regles(request: Request, outil: str = Form("Bash"), champ: str = Form
     sortie, declenchees = regles.evaluer(regles.lire(store), outil, **{champ: texte})
     test = {"outil": outil, "champ": champ, "texte": texte, "sortie": sortie.get("hookSpecificOutput", {}),
             "declenchees": [r.id for r in declenchees]}
-    return _page_regles(request, test=test, mode="avance")
+    return _hooks(request, "tester", test=test)
 
 
-@app.get("/historique", response_class=HTMLResponse)
+@app.get("/admin/historique", response_class=HTMLResponse)
 def historique(request: Request, user: str = Depends(utilisateur)):
-    return rendu(request, "historique.html", revisions=store.historique(limite=200))
+    return rendu_espace(request, "admin_historique.html", "admin", "historique", revisions=store.historique(limite=200),
+                        sous_titre="Toutes les modifications du contexte, avec leur auteur.")
+
+
+@app.get("/historique", include_in_schema=False)
+def ancienne_page_historique(user: str = Depends(utilisateur)):
+    return vers("/admin/historique")
 
 
 @app.get("/commit/{sha}", response_class=HTMLResponse)
@@ -797,11 +970,50 @@ def _fichier_projet(projet: str, categorie: str, autonome: bool) -> tuple[str, s
     return categorie, fichier_projet.generer(projet, categorie, url, docs, autonome)
 
 
-@app.get("/claude", response_class=HTMLResponse)
-def page_claude(request: Request, projet: str = "", categorie: str = "", autonome: str = "",
-                user: str = Depends(utilisateur)):
-    ctx = dict(url_mcp=URL_MCP, projet=projet, categorie=categorie, projets=store.lister_projets(),
-               autonome=bool(autonome) or not categorie, contenu="", erreur="")
+# ------------------------------------------------------------ espace Connexion
+@app.get("/claude", include_in_schema=False)
+def espace_claude(request: Request, user: str = Depends(utilisateur)):
+    """Racine de l'espace Claude. Ancienne page « Connexion Claude » : une demande de fichier de
+    projet (paramètre categorie) est renvoyée vers Connexion › Projet Claude."""
+    if request.query_params.get("categorie"):
+        return vers("/clients/projet", **dict(request.query_params), ancre="apercu")
+    return vers("/claude/directives")
+
+
+@app.get("/clients", include_in_schema=False)
+def espace_connexion(user: str = Depends(utilisateur)):
+    return vers("/clients/claude-code")
+
+
+def _url_mcp() -> str:
+    return URL_MCP or "https://mcp.example.com/mcp"
+
+
+@app.get("/clients/claude-code", response_class=HTMLResponse)
+def clients_claude_code(request: Request, user: str = Depends(utilisateur)):
+    config = json.dumps(regles.configuration_hook(), ensure_ascii=False, indent=2)
+    return rendu_espace(request, "clients_claude_code.html", "connexion", "claude-code", url=_url_mcp(),
+                        config=config, sous_titre="Brancher Claude Code sur ce serveur, avec les hooks.")
+
+
+@app.get("/clients/desktop", response_class=HTMLResponse)
+def clients_desktop(request: Request, user: str = Depends(utilisateur)):
+    return rendu_espace(request, "clients_desktop.html", "connexion", "desktop", url=_url_mcp(),
+                        sous_titre="Brancher Claude Desktop par le pont mcp-remote.")
+
+
+@app.get("/clients/claude-ai", response_class=HTMLResponse)
+def clients_claude_ai(request: Request, user: str = Depends(utilisateur)):
+    return rendu_espace(request, "clients_claude_ai.html", "connexion", "claude-ai", url=_url_mcp(),
+                        url_publique=URL_MCP.removesuffix("/mcp"),
+                        sous_titre="Connecteur claude.ai (web, mobile), si le serveur est exposé.")
+
+
+@app.get("/clients/projet", response_class=HTMLResponse)
+def clients_projet(request: Request, projet: str = "", categorie: str = "", autonome: str = "",
+                   user: str = Depends(utilisateur)):
+    ctx = dict(projet=projet, categorie=categorie, projets=store.lister_projets(),
+               autonome=bool(autonome) or not categorie, contenu="")
     if categorie:
         try:
             cat, ctx["contenu"] = _fichier_projet(projet, categorie, bool(autonome))
@@ -810,7 +1022,14 @@ def page_claude(request: Request, projet: str = "", categorie: str = "", autonom
                 {"projet": projet, "categorie": cat, "autonome": "1" if autonome else ""})
         except ValueError as e:
             ctx["erreur"] = str(e)
-    return rendu(request, "claude.html", **ctx)
+    return rendu_espace(request, "clients_projet.html", "connexion", "projet",
+                        sous_titre="Remplacer les fichiers de contexte d'un projet Claude par ce serveur.", **ctx)
+
+
+@app.get("/clients/jeton", response_class=HTMLResponse)
+def clients_jeton(request: Request, user: str = Depends(utilisateur)):
+    return rendu_espace(request, "clients_jeton.html", "connexion", "jeton",
+                        sous_titre="Enregistré dans ce navigateur pour préremplir les configurations.")
 
 
 @app.get("/claude/fichier")

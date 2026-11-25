@@ -1,0 +1,30 @@
+{% extends "espace.html" %}
+{% block actions %}
+<a class="bouton primaire" href="/nouveau?projet=procedures">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouvelle procédure</a>
+{% endblock %}
+{% block onglet %}
+<div class="bandeau-directives">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+  <span>Savoir-faire réutilisables (« pour faire X : étapes 1, 2, 3 »). Le <strong>titre</strong> de chaque procédure
+    est transmis à Claude à chaque connexion ; Claude lit la procédure avant d'effectuer la tâche qu'elle couvre.
+    Donnez des titres explicites. Une règle « toujours / jamais » va plutôt dans les <a href="/claude/directives">directives</a>.</span>
+</div>
+{% if procedures %}
+<div class="liste-lignes">
+  {% for d in procedures %}
+  <a class="ligne" href="/doc/{{ d.chemin }}">
+    <span class="ligne-titre">{{ d.titre }}</span>
+    <span class="ligne-meta"><code>{{ d.chemin }}</code><span class="ligne-taille">{{ tailles[d.chemin]|tokens }}</span><span>{{ d.maj|date_fr(false) }}</span></span>
+  </a>
+  {% endfor %}
+</div>
+<p class="note">Rangées dans le projet <a href="/projet/procedures"><code>procedures</code></a>.</p>
+{% else %}
+<div class="vide">
+  <h2>Aucune procédure</h2>
+  <p>Exemples : « Diagnostic DNS sur le Mac », « Publier sur GitHub en un commit », « Mettre à jour le NAS ».</p>
+  <a class="bouton primaire" href="/nouveau?projet=procedures">Écrire une procédure</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte">
+  <h2>Fichier de contexte d'un projet Claude</h2>
+  <p>Ce fichier, déposé dans le <strong>Contexte</strong> d'un projet Claude, indique à Claude d'utiliser ce serveur pour
+     le projet choisi, à la place des anciens fichiers.</p>
+  <form method="get" action="/clients/projet" class="formulaire">
+    <div class="champs deux">
+      <label>Projet du serveur
+        <select name="categorie" required>
+          <option value="">— choisir —</option>
+          {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if p.slug == categorie }}>{{ p.titre }}</option>{% endfor %}
+        </select></label>
+      <label>Nom du projet Claude <small class="note">facultatif</small>
+        <input name="projet" value="{{ projet }}" placeholder="Maison"></label>
+    </div>
+    <label class="case"><input type="radio" name="autonome" value="1" {{ 'checked' if autonome }}> Claude met le contexte à jour tout seul</label>
+    <label class="case"><input type="radio" name="autonome" value="" {{ 'checked' if not autonome }}> Claude propose et attend mon accord</label>
+    <div class="actions"><button class="primaire">Générer</button></div>
+  </form>
+  <p class="note">Dans l'app Claude : Projets → le projet → <strong>Contexte</strong> → Ajouter ce fichier, puis retirer
+     les anciens fichiers une fois leur contenu importé sur ce serveur.</p>
+</section>
+
+{% if contenu %}
+<section class="carte" id="apercu">
+  <div class="titre-bloc"><h2>{{ nom_fichier }}</h2>
+    <a class="bouton primaire" href="{{ lien_fichier }}">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Télécharger</a></div>
+  <pre>{{ contenu }}</pre>
+</section>
+{% endif %}
+{% endblock %}

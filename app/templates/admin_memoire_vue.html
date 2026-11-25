@@ -1,0 +1,50 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<div class="tuiles">
+  <div class="tuile"><span class="tuile-val">{{ total_docs }}</span><span class="tuile-lib">documents</span></div>
+  <div class="tuile"><span class="tuile-val">{{ total_actifs|tokens }}</span><span class="tuile-lib">documents actifs</span></div>
+  <div class="tuile"><span class="tuile-val">{{ total_archives|tokens }}</span><span class="tuile-lib">archives (lues sur demande)</span></div>
+  {% set nb_alertes = projets|map(attribute='alertes')|map('length')|sum %}
+  <a class="tuile {{ 'tuile-alerte' if nb_alertes }}" href="/admin/memoire/sante"><span class="tuile-val">{{ nb_alertes }}</span><span class="tuile-lib">point{{ 's' if nb_alertes > 1 }} de santé</span></a>
+</div>
+
+<section class="carte">
+  <h2>Par projet</h2>
+  <div class="tableau-defile">
+  <table class="tableau">
+    <thead><tr><th>Projet</th><th class="nb">Documents</th><th class="nb">Démarrage</th><th class="nb">Actifs</th><th class="nb">Archives</th><th>Fiche résumé</th><th>Dernière modification</th><th class="nb">Santé</th></tr></thead>
+    <tbody>
+    {% for p in projets %}
+      <tr>
+        <td><a href="/projet/{{ p.slug }}">{{ p.titre }}</a></td>
+        <td class="nb">{{ p.docs|length }}</td>
+        <td class="nb" title="Fiche résumé + index renvoyés par vue_ensemble(projet)"><strong>{{ p.demarrage|tokens }}</strong></td>
+        <td class="nb">{{ p.tokens_actifs|tokens }}</td>
+        <td class="nb">{{ p.tokens_archives|tokens if p.tokens_archives else '—' }}</td>
+        <td>{% if p.resume %}<a href="/doc/{{ p.resume.doc.chemin }}">{{ p.resume.tokens|tokens }}</a>{% elif p.slug != 'general' %}<span class="pastille ko">absente</span>{% else %}—{% endif %}</td>
+        <td>{{ p.maj|date_fr if p.maj else '—' }}</td>
+        <td class="nb">{% if p.alertes %}<a href="/admin/memoire/sante#sante-{{ p.slug }}" class="pastille {{ 'ko' if p.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ p.alertes|length }}</a>{% else %}<span class="pastille ok">OK</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Le démarrage est ce que Claude charge au début d'une conversation de projet. Un document n'est ensuite lu que par section, à la demande.</p>
+</section>
+
+<section class="carte">
+  <h2>Plus gros documents actifs</h2>
+  <div class="tableau-defile">
+  <table class="tableau">
+    <thead><tr><th>Document</th><th class="nb">Taille</th><th class="nb">Sections</th><th>Plus grosse section (texte propre)</th></tr></thead>
+    <tbody>
+    {% for d in plus_gros %}
+      <tr><td><a href="/doc/{{ d.doc.chemin }}">{{ d.doc.titre }}</a><br><code class="petit">{{ d.doc.chemin }}</code></td>
+        <td class="nb">{{ d.tokens|tokens }}</td><td class="nb">{{ d.sections }}</td>
+        <td>{% if d.plus_grosse %}{{ d.plus_grosse[0][:70] }} <span class="note">({{ d.plus_grosse[1]|tokens }})</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

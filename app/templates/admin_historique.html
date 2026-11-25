@@ -1,15 +1,6 @@
-{% extends "base.html" %}
-{% block largeur %}moyen{% endblock %}
-{% block titre %}Historique — MCP Memory{% endblock %}
-{% block contenu %}
-<header class="page-tete">
-  <div>
-    <p class="surtitre">Toutes les modifications</p>
-    <h1>Historique</h1>
-    <p class="sous">{{ revisions|length }} version{{ 's' if revisions|length > 1 }}</p>
-  </div>
-</header>
-
+{% extends "espace.html" %}
+{% block onglet %}
+<p class="note">{{ revisions|length }} dernière{{ 's' if revisions|length > 1 }} version{{ 's' if revisions|length > 1 }} du contexte (documents, projets, règles) ; cliquer pour voir le détail d'une modification.</p>
 <div class="journal">
 {% set ns = namespace(jour='') %}
 {% for r in revisions %}

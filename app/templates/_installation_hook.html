@@ -1,13 +1,8 @@
-{# Bloc « Activer sur un poste », commun aux modes simple et avancé. Variables : config, ouvert #}
+{# Encadré « activer les hooks à la main » (Connexion › Claude Code). Variables : config, ouvert #}
 <details class="carte" id="installation" {{ 'open' if ouvert }}>
-  <summary><h2 style="display:inline">Activer sur un poste (une seule fois)</h2></summary>
+  <summary><h2 style="display:inline">À la main : activer les hooks (une fois par poste)</h2></summary>
   <p>Un seul hook, posé une fois dans <code>~/.claude/settings.json</code> : avant chaque action, Claude Code
-     interroge ce serveur, qui applique les règles de cette page. Ensuite, tout se règle ici.</p>
-  <p><strong>Le plus simple :</strong> demander à Claude Code sur le poste
-     « <code>Installe MCP Memory sur ce poste en suivant {{ url_installation(request) }}</code> ».
-     Il enregistre le serveur si besoin, installe ce hook ainsi que deux filets locaux (avertissement si le
-     serveur est injoignable, règles Git appliquées même serveur éteint) et vérifie le tout.
-     Sinon, à la main :</p>
+     interroge ce serveur, qui applique les règles de <a href="/claude/hooks">Claude › Hooks</a>. Ensuite, tout se règle là.</p>
   <ol class="etapes">
     <li><strong>Nom du serveur.</strong> Dans un terminal : <code>claude mcp list</code>. Le nom est ce qui
       précède les deux-points (<code>mcp-memory: https://…/mcp (HTTP) - ✔ Connected</code>). Le reporter ici :
@@ -15,7 +10,7 @@
              pattern="[A-Za-z0-9_.:\-]+" aria-label="Nom du serveur dans Claude Code"></li>
     <li><strong>Portée.</strong> <code>claude mcp get <span class="nom-serveur">mcp-memory</span></code> doit
       afficher <code>Scope: User config</code> (serveur disponible dans tous les projets). Sinon, le réenregistrer
-      avec <code>--scope user</code> (commande sur la page <a href="/claude">Connexion Claude</a>) : ailleurs,
+      avec <code>--scope user</code> (commande ci-dessus) : ailleurs,
       le hook ne trouverait pas le serveur et laisserait tout passer.</li>
     <li><strong>Copier le bloc</strong> et le fusionner dans <code>~/.claude/settings.json</code>, à côté des
       hooks existants (sans les remplacer). Vous pouvez aussi demander à Claude Code : « ajoute ce hook à mes
@@ -29,7 +24,7 @@
   <p class="note">Le bloc est fixe (<code>"matcher": "*"</code> : le serveur est consulté avant chaque action) :
      une règle ajoutée ici s'applique tout de suite, sans rien recopier. <code>onFailure: continue</code> : si le serveur est injoignable, l'action suit le circuit normal
      des permissions (mettre <code>block</code> pour tout bloquer dans ce cas). Les hooks n'existent que dans
-     Claude Code : pour claude.ai et Claude Desktop, utilisez les <a href="/doc/directives">directives</a>.</p>
+     Claude Code : pour claude.ai et Claude Desktop, utilisez les <a href="/claude/directives">directives</a>.</p>
 </details>
 <script>
 (function () {

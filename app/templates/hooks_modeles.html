@@ -1,0 +1,21 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<p class="note">Vérifiées par Claude Code avant chaque action ; un changement s'applique immédiatement.
+   Pas encore actif sur un poste ? <a href="/clients/claude-code#installation">Connexion › Claude Code</a>.</p>
+
+<section class="bloc" id="modeles">
+  <div class="liste-lignes">
+  {% for m, r in modeles %}
+    <form method="post" action="/regles/modele/{{ m.id }}" class="ligne interrupteur-ligne" id="r-{{ m.id }}">
+      <span class="ligne-titre">
+        <strong>{{ m.nom }}</strong>
+        <small class="note">{{ m.aide }}</small>
+      </span>
+      <button class="interrupteur {{ 'on' if r and r.actif }}" role="switch" aria-checked="{{ 'true' if r and r.actif else 'false' }}"
+              title="{{ 'Désactiver' if r and r.actif else 'Activer' }}"><span></span></button>
+    </form>
+  {% endfor %}
+  </div>
+</section>
+<p class="note">Besoin d'autre chose ? <a href="/claude/hooks/mes-regles">Créer une règle en une phrase</a>.</p>
+{% endblock %}

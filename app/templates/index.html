@@ -51,7 +51,7 @@
     </dl>
     <div class="carte-projet-pied">
       {% if i and i.alertes %}
-        <a href="/memoire#sante-{{ p.slug }}" class="pastille {{ 'ko' if i.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ i.alertes|length }} point{{ 's' if i.alertes|length > 1 }} de santé</a>
+        <a href="/admin/memoire/sante#sante-{{ p.slug }}" class="pastille {{ 'ko' if i.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ i.alertes|length }} point{{ 's' if i.alertes|length > 1 }} de santé</a>
       {% elif i and i.docs %}<span class="pastille ok">Santé OK</span>
       {% else %}<span class="pastille">Vide</span>{% endif %}
       <a class="lien petit" href="/nouveau?projet={{ p.slug }}">+ Document</a>
@@ -64,9 +64,9 @@
   <div class="bandeau-directives">
     <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
     {% if directives %}
-    <span><strong><a href="/doc/directives">Directives globales</a></strong> — transmises à Claude à chaque connexion,
+    <span><strong><a href="/claude/directives">Directives globales</a></strong> — transmises à Claude à chaque connexion,
       dans tous les clients ({{ directives.contenu|length // 4 }} tokens environ).
-      {% if projets|selectattr('slug', 'equalto', 'procedures')|list %}Procédures : <a href="/projet/procedures">projet « procedures »</a>.{% endif %}</span>
+      {% if projets|selectattr('slug', 'equalto', 'procedures')|list %}Procédures : <a href="/claude/procedures">Claude › Procédures</a>.{% endif %}</span>
     {% else %}
     <span><strong>Aucune directive globale.</strong> Les consignes du document <code>directives</code> (langue, règles Git…)
       sont transmises à Claude à chaque connexion. <a href="/nouveau?nom=directives">Créer le document</a></span>
@@ -97,7 +97,7 @@
     </div>
   </section>
   <section class="bloc">
-    <div class="titre-bloc"><h2>Activité</h2><a class="lien petit" href="/historique">Tout l'historique →</a></div>
+    <div class="titre-bloc"><h2>Activité</h2><a class="lien petit" href="/admin/historique">Tout l'historique →</a></div>
     <ol class="fil">
     {% for r in activite %}
       <li><a href="/commit/{{ r.sha }}">{{ r.message }}</a>

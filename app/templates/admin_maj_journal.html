@@ -1,0 +1,9 @@
+{% extends "espace.html" %}
+{% block largeur_espace %}etroit{% endblock %}
+{% block onglet %}
+<section class="carte">
+  <div class="titre-bloc"><h2>Dernière opération</h2><a class="lien petit" href="/admin/mise-a-jour/journal">Actualiser</a></div>
+  <pre id="maj-journal">{{ journal or '(vide)' }}</pre>
+  <p class="note">Sur le serveur : <code>.maj/derniere.log</code> ; service : <code>systemctl status mcp-memory-maj.path</code>.</p>
+</section>
+{% endblock %}

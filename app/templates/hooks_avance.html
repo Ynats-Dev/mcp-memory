@@ -1,29 +1,12 @@
-{% extends "base.html" %}
-{% block largeur %}moyen{% endblock %}
-{% block titre %}Hooks — MCP Memory{% endblock %}
-{% block contenu %}
-<header class="page-tete">
-  <div>
-    <p class="surtitre">Claude Code</p>
-    <h1>Hooks</h1>
-    <p class="sous">Règles appliquées avant chaque action de Claude Code : refuser, demander confirmation,
-       autoriser ou ajouter une consigne. Elles prennent effet immédiatement, sans toucher aux postes.</p>
-  </div>
-  <div class="actions">
-    <a class="bouton primaire" href="/regles/nouvelle">
-      <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouvelle règle</a>
-  </div>
-</header>
-<nav class="onglets" aria-label="Mode d'affichage">
-  <a href="/regles">Simple</a>
-  <a href="/regles?mode=avance" class="actif" aria-current="page">Avancé</a>
-</nav>
-{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
-{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
-
+{% extends "espace.html" %}
+{% block actions %}
+<a class="bouton primaire" href="/regles/nouvelle">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouvelle règle</a>
+{% endblock %}
+{% block onglet %}
 <section class="bloc">
-  <div class="titre-bloc"><h2>Règles <span class="n">{{ regles|length }}</span></h2>
-    <span class="note">glisser pour réordonner · la décision la plus stricte l'emporte</span></div>
+  <div class="titre-bloc"><h2>Toutes les règles <span class="n">{{ regles|length }}</span></h2>
+    <span class="note">outil · champ · motif (expressions régulières) · glisser pour réordonner · la décision la plus stricte l'emporte</span></div>
   {% if regles %}
   <div class="liste-lignes" id="liste-regles">
   {% for r in regles %}
@@ -48,41 +31,13 @@
   {% else %}
   <div class="vide">
     <h2>Aucune règle</h2>
-    <p>Commencez par les règles Git recommandées (confirmer tout <code>git push</code>, refuser les commits
-       signés Claude), ou créez la vôtre.</p>
+    <p>Commencez par les <a href="/claude/hooks">règles prêtes à l'emploi</a>, ou créez la vôtre.</p>
   </div>
   {% endif %}
   <form method="post" action="/regles/git" class="actions">
     <button class="lien petit">+ Ajouter les règles Git recommandées</button></form>
+  <p class="note">Une règle du mode simple modifiée ici devient une règle avancée. Fichier : <code>contexte/.regles.yml</code>, versionné avec le reste.</p>
 </section>
-
-<section class="carte" id="tester">
-  <h2>Tester une action</h2>
-  <p class="note">Ce que le hook répondrait à Claude Code, sans rien exécuter.</p>
-  <form method="post" action="/regles/tester#tester" class="formulaire">
-    <div class="champs trois">
-      <label>Outil <input name="outil" value="{{ test.outil|default('Bash') }}" list="outils-connus"></label>
-      <label>Champ
-        <select name="champ">
-          {% for c in ['commande', 'fichier', 'contenu'] %}<option value="{{ c }}" {{ 'selected' if test.champ == c }}>{{ c }}</option>{% endfor %}
-        </select></label>
-      <label>Texte <input name="texte" value="{{ test.texte|default('') }}" placeholder="git push origin master"></label>
-    </div>
-    <datalist id="outils-connus"><option value="Bash"><option value="Write"><option value="Edit"><option value="Read"></datalist>
-    <div class="actions"><button class="primaire">Tester</button></div>
-  </form>
-  {% if test %}
-    {% set d = test.sortie.permissionDecision %}
-    <p class="{{ 'alerte' if d == 'deny' else 'info' }}"><span>
-      {% if d %}<strong>{{ decisions[d] }}</strong> — {{ test.sortie.permissionDecisionReason }}
-      {% elif test.sortie.additionalContext %}<strong>Consigne ajoutée</strong> — {{ test.sortie.additionalContext }}
-      {% else %}Aucune règle ne s'applique : l'action suit le circuit normal des permissions.{% endif %}
-      {% if test.declenchees %}<br><small>Règles : {{ test.declenchees|join(', ') }}</small>{% endif %}
-    </span></p>
-  {% endif %}
-</section>
-
-{% with ouvert = not regles %}{% include "_installation_hook.html" %}{% endwith %}
 
 <script>
 // Glisser-déposer : ordre des règles (affichage et lecture ; la décision la plus stricte l'emporte toujours)

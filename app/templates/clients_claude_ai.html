@@ -1,0 +1,27 @@
+{% extends "espace.html" %}
+{% block onglet %}
+{% if not url_publique %}
+<p class="alerte"><span>Ce serveur n'est pas exposé sur Internet (<code>MCP_PUBLIC_URL</code> non renseigné) :
+   claude.ai web et mobile ne peuvent pas le joindre. C'est le réglage par défaut, le plus sûr.</span></p>
+{% endif %}
+<section class="carte">
+  <h2>Connecteur claude.ai (option, exige une exposition Internet)</h2>
+  <p>claude.ai joint le serveur <strong>depuis Internet</strong> et s'authentifie en OAuth : le serveur MCP embarque
+     son propre serveur OAuth, protégé par <code>OAUTH_PASSWORD</code>.</p>
+  <ol class="etapes">
+    <li><strong>Serveur</strong> : renseigner <code>MCP_PUBLIC_URL</code> et <code>OAUTH_PASSWORD</code> dans le
+      <code>.env</code> (<code>openssl rand -base64 18</code>), puis <code>docker compose up -d --build</code>.</li>
+    <li><strong>Reverse proxy HTTPS</strong> : ne rendre publics que le endpoint MCP et le parcours OAuth ; l'interface
+      web reste réservée au réseau local. Vérifier depuis l'extérieur :
+      <code>{{ url_publique or 'https://mcp.example.com' }}/.well-known/oauth-authorization-server</code> → JSON.</li>
+    <li><strong>claude.ai</strong> → Réglages → Connecteurs → <em>Ajouter un connecteur personnalisé</em> : nom
+      <code>MCP Memory</code>, URL <code>{{ url }}</code> → <em>Se connecter</em> → mot de passe <code>OAUTH_PASSWORD</code>.
+      Le connecteur est alors disponible sur le web, le mobile et Claude Desktop.</li>
+  </ol>
+  <p class="note">Sécurité : seules les adresses de retour de claude.ai / claude.com sont acceptées ; 5 mauvais mots de
+     passe bloquent la page 15 min ; jetons d'une heure renouvelés, 90 jours sans usage au maximum.
+     Révoquer tous les accès : <code>docker compose exec mcp rm /data/.oauth/etat.json && docker compose restart mcp</code>.</p>
+</section>
+<p class="note">Les hooks n'existent pas sur claude.ai : seules les <a href="/claude/directives">directives</a> et les
+   <a href="/claude/procedures">procédures</a> s'y appliquent.</p>
+{% endblock %}

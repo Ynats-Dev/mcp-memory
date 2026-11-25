@@ -1,23 +1,10 @@
-{% extends "base.html" %}
-{% block largeur %}etroit{% endblock %}
-{% block titre %}Mon compte — MCP Memory{% endblock %}
-{% block contenu %}
-{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
-<header class="page-tete">
-  <div>
-    <p class="surtitre">Interface web</p>
-    <h1>Mon compte</h1>
-    <p class="sous">Connecté en tant que <strong>{{ utilisateur_courant(request) }}</strong>.</p>
-  </div>
-  <div class="actions">
-    <form method="post" action="/deconnexion"><button>Se déconnecter</button></form>
-  </div>
-</header>
-
+{% extends "espace.html" %}
+{% block largeur_espace %}etroit{% endblock %}
+{% block actions %}<form method="post" action="/deconnexion"><button>Se déconnecter</button></form>{% endblock %}
+{% block onglet %}
 <form method="post" action="/compte/mot-de-passe" class="carte formulaire">
   <h2>Changer le mot de passe</h2>
-  {% if erreur %}<p class="alerte">{{ erreur }}</p>{% endif %}
-  <input type="text" name="identifiant" value="{{ utilisateur_courant(request) }}" autocomplete="username" hidden>
+    <input type="text" name="identifiant" value="{{ utilisateur_courant(request) }}" autocomplete="username" hidden>
   <label>Mot de passe actuel
     <input type="password" name="ancien" autocomplete="current-password" required></label>
   <label>Nouveau mot de passe <small class="note">10 caractères minimum</small>

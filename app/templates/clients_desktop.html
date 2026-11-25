@@ -1,0 +1,29 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte">
+  <h2>Configuration</h2>
+  <p>Claude Desktop ne lance que des serveurs locaux : le pont <code>mcp-remote</code> (Node.js requis) relaie vers ce
+     serveur. Fusionner dans <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>, puis
+     quitter et relancer Claude Desktop.</p>
+  <p class="etat-jeton note"></p>
+  <div class="bloc-copie">
+    <button type="button" class="copier" data-cible="conf-desktop">Copier</button>
+<pre id="conf-desktop">{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "{{ url }}",
+               "--header", "Authorization:${CONTEXTE_AUTH}"],
+      "env": { "CONTEXTE_AUTH": "Bearer <span class="jeton">COLLER_ICI_LE_MCP_TOKEN</span>" }
+    }
+  }
+}</pre>
+  </div>
+  <p class="note">Démarrage plus rapide : <code>npm i -g mcp-remote</code>, puis remplacer <code>"command": "npx"</code>
+     par le chemin de <code>mcp-remote</code> (<code>which mcp-remote</code>) et retirer <code>"-y", "mcp-remote",</code>
+     des arguments.</p>
+</section>
+<p class="note">Les hooks n'existent pas dans Claude Desktop : seules les <a href="/claude/directives">directives</a> et
+   les <a href="/claude/procedures">procédures</a> s'y appliquent.</p>
+{% include "_jeton_script.html" %}
+{% endblock %}

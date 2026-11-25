@@ -1,0 +1,27 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte" id="tester">
+  <p class="note">Ce que le hook répondrait à Claude Code pour une action, d'après les règles actives, sans rien exécuter.</p>
+  <form method="post" action="/regles/tester" class="formulaire">
+    <div class="champs trois">
+      <label>Outil <input name="outil" value="{{ test.outil|default('Bash') }}" list="outils-connus"></label>
+      <label>Champ
+        <select name="champ">
+          {% for c in ['commande', 'fichier', 'contenu'] %}<option value="{{ c }}" {{ 'selected' if test.champ == c }}>{{ c }}</option>{% endfor %}
+        </select></label>
+      <label>Texte <input name="texte" value="{{ test.texte|default('') }}" placeholder="git push origin master"></label>
+    </div>
+    <datalist id="outils-connus"><option value="Bash"><option value="Write"><option value="Edit"><option value="Read"></datalist>
+    <div class="actions"><button class="primaire">Tester</button></div>
+  </form>
+  {% if test %}
+    {% set d = test.sortie.permissionDecision %}
+    <p class="{{ 'alerte' if d == 'deny' else 'info' }}"><span>
+      {% if d %}<strong>{{ decisions[d] }}</strong> — {{ test.sortie.permissionDecisionReason }}
+      {% elif test.sortie.additionalContext %}<strong>Consigne ajoutée</strong> — {{ test.sortie.additionalContext }}
+      {% else %}Aucune règle ne s'applique : l'action suit le circuit normal des permissions.{% endif %}
+      {% if test.declenchees %}<br><small>Règles : {{ test.declenchees|join(', ') }}</small>{% endif %}
+    </span></p>
+  {% endif %}
+</section>
+{% endblock %}

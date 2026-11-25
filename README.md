@@ -14,6 +14,21 @@ Dans la suite, `IP_DU_SERVEUR` désigne la machine du réseau local qui héberge
 et `mcp.example.com` le nom éventuel donné au service par votre reverse proxy. Remplacez-les
 par vos propres valeurs.
 
+## Organisation de l'interface
+
+La barre latérale donne accès aux documents et à trois espaces, chacun découpé en onglets
+(une adresse par onglet) :
+
+| Espace | Onglets |
+|---|---|
+| **Contexte** | Accueil et recherche ; arbre des projets et sous-projets (page d'un projet : Documents · Sous-projets · Fiche résumé · Importer / Exporter · Paramètres) |
+| **Claude** (`/claude`) | Directives · Procédures · Hooks (Règles prêtes à l'emploi · Mes règles · Avancé · Tester) |
+| **Connexion** (`/clients`) | Claude Code · Claude Desktop · claude.ai · Projet Claude · Jeton |
+| **Administration** (`/admin`) | Mémoire (Vue d'ensemble · Santé · Usage par Claude) · Historique · Sauvegarde · Mise à jour (Version · Dépôt de référence · Journal) · Compte |
+
+Les anciennes adresses (`/memoire`, `/historique`, `/mise-a-jour`, `/compte`, `/regles`)
+redirigent vers les onglets correspondants.
+
 ## Fonctionnement
 
 - Chaque document est un fichier Markdown (`resume`, `maison/reseau`, `maison/nas/procedures`…)
@@ -22,7 +37,7 @@ par vos propres valeurs.
   avec son auteur. L'historique, les différences et la restauration d'une version
   sont disponibles dans l'interface web et via les outils MCP.
 - Les deux conteneurs partagent le volume ; un verrou fichier sérialise les écritures.
-- Sauvegarde : chaque nuit (et à la demande, page **Mémoire**), le dépôt Git du contexte est poussé vers un dépôt distant **vide** (`GIT_REMOTE`, `GIT_REMOTE_USER`, `GIT_REMOTE_TOKEN`, `SAUVEGARDE_HEURE`). Le jeton passe par un en-tête HTTP, jamais par `.git/config`. Si le conteneur ne résout pas le nom du dépôt (DNS du réseau local) : `GIT_REMOTE_HOST` et `GIT_REMOTE_HOST_IP`.
+- Sauvegarde : chaque nuit (et à la demande, **Administration › Sauvegarde**), le dépôt Git du contexte est poussé vers un dépôt distant **vide** (`GIT_REMOTE`, `GIT_REMOTE_USER`, `GIT_REMOTE_TOKEN`, `SAUVEGARDE_HEURE`). Le jeton passe par un en-tête HTTP, jamais par `.git/config`. Si le conteneur ne résout pas le nom du dépôt (DNS du réseau local) : `GIT_REMOTE_HOST` et `GIT_REMOTE_HOST_IP`.
 
 ### Projets
 
@@ -47,7 +62,7 @@ le découpent, sur un seul niveau : `maison/nas`, décrit par `contexte/maison/n
 - `rechercher(projet="maison")` inclut les sous-projets ; `projet="maison/nas"` se limite au NAS.
 - Un document de sous-projet exige un sous-projet déclaré (pas de création implicite), et un
   même nom ne peut pas désigner à la fois un document et un sous-projet.
-- Interface web : **Plus › Nouveau sous-projet** sur la page d'un projet. La barre latérale
+- Interface web : onglet **Sous-projets** (ou **Paramètres**) de la page d'un projet. La barre latérale
   affiche les sous-projets sous leur projet ; la page d'un projet les présente en cartes
   (documents, coût de démarrage, fiche résumé manquante). Renommer, supprimer (s'il est
   vide), importer et exporter fonctionnent comme pour un projet.
@@ -64,7 +79,7 @@ Le document `directives` (à la racine, sans projet) rassemble les consignes val
 chaque connexion : tous les clients (Claude Code, Claude Desktop, claude.ai, VS Code) le
 reçoivent sans appel d'outil, et une modification s'applique à la session suivante.
 
-- Accès : **Directives** dans la barre latérale (l'accueil propose de le créer s'il manque).
+- Accès : **Claude › Directives** (l'accueil propose de le créer s'il manque).
 - Restez bref : il est chargé dans chaque conversation. Au-delà d'environ 2 000 tokens, seul
   un renvoi vers le document est transmis.
 - Ce sont des consignes, pas des verrous : pour **imposer** une règle dans Claude Code, voir
@@ -80,7 +95,7 @@ c'est sur eux que Claude décide d'ouvrir une procédure.
 
 ### Hooks (règles appliquées par Claude Code)
 
-La page **Hooks** administre des règles évaluées **avant chaque action** de Claude Code :
+L'onglet **Claude › Hooks** administre des règles évaluées **avant chaque action** de Claude Code :
 refuser, demander confirmation, autoriser sans demander, ou ajouter une consigne pour Claude.
 Exemples : confirmer tout `git push`, refuser un commit signé Claude, rappeler une consigne
 avant toute écriture dans un `.env`.
@@ -107,7 +122,8 @@ avant toute écriture dans un `.env`.
   Claude » : ce qui est signé Claude ne peut plus être créé, donc plus être poussé.
 - Les règles sont stockées dans `contexte/.regles.yml` et versionnées avec le reste
   (historique, sauvegarde).
-- **Installation, une fois par poste** (encadré *Activer sur un poste* de la page) : un seul
+- **Installation, une fois par poste** (**Connexion › Claude Code** : le plus simple est d'y copier la
+  phrase à donner à Claude ; sinon, encadré *À la main : activer les hooks*) : un seul
   hook `PreToolUse` de type `mcp_tool`, qui appelle l'outil `controler_action` du serveur avant
   chaque action. Ensuite, toute modification dans l'interface s'applique immédiatement, sans
   toucher aux postes.
@@ -136,7 +152,7 @@ avant toute écriture dans un `.env`.
 `vue_ensemble` (à appeler en premier), `lister_projets`, `lister_documents`, `plan_document`,
 `lire_document`, `rechercher`, `ecrire_document`, `ajouter_au_document`, `remplacer_texte`,
 `deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`, et
-`controler_action`, réservé au hook de la page **Hooks**.
+`controler_action`, réservé au hook de **Claude › Hooks**.
 `creer_projet` crée un projet, ou un sous-projet avec `parent`. Les consignes demandent à
 Claude de le proposer (identifiant, titre, documents à y déplacer) et de n'appeler l'outil
 qu'après votre accord. Dans Claude Code, ne l'ajoutez pas aux outils autorisés d'office : la
@@ -198,7 +214,7 @@ sudo ufw allow from 192.168.1.0/24 to any port 8765,8766 proto tcp
 ```
 
 Mise à jour du code : `git pull && docker compose up -d --build` (les données du volume ne
-sont pas touchées), ou le bouton **Mise à jour** de l'interface (voir plus bas).
+sont pas touchées), ou **Administration › Mise à jour** dans l'interface (voir plus bas).
 
 ## Accès à l'interface web
 
@@ -206,7 +222,7 @@ sont pas touchées), ou le bouton **Mise à jour** de l'interface (voir plus bas
 10 caractères minimum) : l'ouvrir juste après le premier déploiement. Ensuite, page de connexion
 (« Rester connecté » = 30 jours, sinon 12 h ; 5 échecs = 5 minutes de blocage). Le mot de passe
 est stocké haché (PBKDF2) dans `/data/.web/compte.json`, hors du dépôt Git du contexte.
-**Mon compte** (bas de la barre latérale) : changer le mot de passe (déconnecte les autres
+**Administration › Compte** (ou l'avatar en bas de la barre latérale) : changer le mot de passe (déconnecte les autres
 navigateurs) ou se déconnecter.
 
 Mot de passe oublié :
@@ -215,7 +231,7 @@ cd /opt/mcp-memory && docker compose exec web python -m app.compte reinitialiser
 # puis ouvrir l'interface : elle redemande la création du compte (documents intacts)
 ```
 
-## Page Mémoire (indicateurs)
+## Administration › Mémoire (indicateurs)
 
 - **Par projet** : coût de démarrage d'une conversation (fiche résumé + index ; un sous-projet y compte pour une ligne), volume des documents actifs et des archives (sous-projets compris), fiche résumé, dernière modification.
 - **Santé** : fiche résumé absente ou trop longue (projet ou sous-projet), document long sans titres, section de plus de ~3k tokens, dérive en journal (« 🆕 », titres datés, tâches cochées), renvois vers des documents absents. Dans les documents, un chemin `projet/document` ou `projet/sous-projet/document` cité devient un lien (barré s'il n'existe pas) ; un sous-projet cité (`projet/sous-projet`) mène à sa page.
@@ -228,7 +244,7 @@ cd /opt/mcp-memory && docker compose exec web python -m app.compte reinitialiser
 
 ## Mise à jour de l'application (bouton)
 
-Menu **Mise à jour** : affiche la version en service, les nouveaux commits du dépôt de
+**Administration › Mise à jour** : l'onglet Version affiche la version en service, les nouveaux commits du dépôt de
 référence (un point signale qu'il y en a) et met à jour en un clic (récupération du dépôt
 de référence, puis `docker compose up -d --build`, soit une à deux minutes d'indisponibilité ; les documents ne
 sont pas touchés).
@@ -247,7 +263,7 @@ en root. En cas de problème : `systemctl status mcp-memory-maj.path`, `.maj/der
 Une mise à jour est refusée si le dossier contient des modifications locales.
 
 **Dépôt de référence.** Par défaut, les mises à jour viennent de
-`https://github.com/Ynats-Dev/mcp-memory.git` (branche `master`). La carte **Dépôt de
+`https://github.com/Ynats-Dev/mcp-memory.git` (branche `master`). L'onglet **Dépôt de
 référence** de la page Mise à jour permet d'indiquer un autre dépôt (un fork, un miroir
 interne) et sa branche, et **Revenir au dépôt par défaut** le rétablit en un clic.
 
@@ -268,7 +284,7 @@ interne) et sa branche, et **Revenir au dépôt par défaut** le rétablit en un
 
 ## Connexion des clients
 
-La page **Connexion Claude** de l'interface web permet d'enregistrer le jeton
+L'espace **Connexion** de l'interface web permet (onglet **Jeton**) d'enregistrer le jeton
 (`MCP_TOKEN`) **dans le navigateur** (localStorage, jamais côté serveur), de le
 vérifier auprès du serveur MCP, et de copier les configurations Claude Desktop /
 Claude Code déjà remplies.
@@ -283,12 +299,12 @@ Installe MCP Memory sur ce poste en suivant https://mcp.example.com/claude-code/
 
 Le serveur publie à cette adresse (sans authentification : elle ne contient aucun secret) une
 procédure écrite pour Claude. Claude enregistre le serveur en vous demandant le jeton, installe
-le hook global de la page **Hooks**, ajoute deux filets locaux (`verif-mcp.sh` prévient Claude
+le hook global des règles (**Claude › Hooks**), ajoute deux filets locaux (`verif-mcp.sh` prévient Claude
 quand le serveur est injoignable ; `garde-git.sh` applique les règles Git même serveur éteint
 et affiche le détail de chaque push — dépôt, branches, commits envoyés — dans la demande de
 confirmation),
-règle l'attribution et la confirmation des `git push`, puis vérifie le tout. La page **Connexion
-Claude** affiche cette phrase avec la bonne adresse si `MCP_PUBLIC_URL` est renseigné.
+règle l'attribution et la confirmation des `git push`, puis vérifie le tout. L'onglet **Connexion ›
+Claude Code** affiche cette phrase avec la bonne adresse si `MCP_PUBLIC_URL` est renseigné.
 
 ### Claude Code (accès global, une seule commande)
 
@@ -354,7 +370,7 @@ réseau local ; sur le web ou le mobile, Claude signalera que les outils sont in
 
 1. Importer les fichiers du projet dans le serveur (voir *Import* ci-dessous), par exemple
    dans le projet `maison`.
-2. Interface web → **Claude** (ou **Fichier pour Claude** sur la page d'un projet ; pas
+2. Interface web → **Connexion › Projet Claude** (ou onglet **Importer / Exporter** d'un projet ; pas
    sur un sous-projet) : nom du projet + catégorie → *Télécharger* le fichier
    `mcp-memory-<categorie>.md`. Il indique à Claude le connecteur à utiliser, les documents
    du projet, et lui demande de tenir le contexte à jour sans qu'on le lui demande (case à
@@ -444,7 +460,7 @@ critiques s'imposent par les réglages (`~/.claude/settings.json`, à fusionner 
 - `permissions.ask` : tout `git push` demande confirmation, même s'il figure ailleurs dans
   la liste `allow` (retirez-l'en au passage).
 
-Pour aller plus loin, la page **Hooks** de l'interface administre des règles évaluées par le
+Pour aller plus loin, l'onglet **Claude › Hooks** de l'interface administre des règles évaluées par le
 serveur avant chaque action (voir *Hooks*). Un hook local (`PreToolUse` sur `Bash`, script sur
 le poste) reste utile en filet pour les règles critiques : il s'applique même quand le serveur
 est injoignable. Ces mécanismes ne concernent que Claude Code : pour les autres clients,

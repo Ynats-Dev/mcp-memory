@@ -1,38 +1,5 @@
-{% extends "base.html" %}
-{% block largeur %}moyen{% endblock %}
-{% block titre %}Hooks — MCP Memory{% endblock %}
-{% block contenu %}
-<header class="page-tete">
-  <div>
-    <p class="surtitre">Claude Code</p>
-    <h1>Hooks</h1>
-    <p class="sous">Ce que Claude Code a le droit de faire, vérifié avant chaque action.
-       Les changements s'appliquent immédiatement.</p>
-  </div>
-</header>
-<nav class="onglets" aria-label="Mode d'affichage">
-  <a href="/regles" class="actif" aria-current="page">Simple</a>
-  <a href="/regles?mode=avance">Avancé</a>
-</nav>
-{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
-{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
-
-<section class="bloc" id="modeles">
-  <div class="titre-bloc"><h2>Règles prêtes à l'emploi</h2></div>
-  <div class="liste-lignes">
-  {% for m, r in modeles %}
-    <form method="post" action="/regles/modele/{{ m.id }}" class="ligne interrupteur-ligne" id="r-{{ m.id }}">
-      <span class="ligne-titre">
-        <strong>{{ m.nom }}</strong>
-        <small class="note">{{ m.aide }}</small>
-      </span>
-      <button class="interrupteur {{ 'on' if r and r.actif }}" role="switch" aria-checked="{{ 'true' if r and r.actif else 'false' }}"
-              title="{{ 'Désactiver' if r and r.actif else 'Activer' }}"><span></span></button>
-    </form>
-  {% endfor %}
-  </div>
-</section>
-
+{% extends "espace.html" %}
+{% block onglet %}
 <section class="carte" id="creer">
   <h2>{{ 'Modifier la règle' if saisie.ancien_id else 'Créer une règle' }}</h2>
   <form method="post" action="/regles/simple" class="formulaire phrase-regle">
@@ -57,10 +24,10 @@
              placeholder="Ex. : rien n'est publié sans mon accord."></label>
     <div class="actions">
       <button class="primaire">{{ 'Enregistrer' if saisie.ancien_id else 'Créer la règle' }}</button>
-      {% if saisie.ancien_id %}<a class="lien" href="/regles">Annuler</a>{% endif %}
+      {% if saisie.ancien_id %}<a class="lien" href="/claude/hooks/mes-regles">Annuler</a>{% endif %}
     </div>
     <p class="note">Exemple : « Ne jamais pousser sur GitHub au nom de Claude » = activer <em>Jamais de commit ni
-       de PR signé Claude</em> ci-dessus (ce qui est signé Claude ne peut plus partir), et au besoin
+       de PR signé Claude</em> (<a href="/claude/hooks">règles prêtes à l'emploi</a>), et au besoin
        « Quand Claude veut pousser du code vers un dépôt contenant <code>github</code> : me demander ».</p>
   </form>
 </section>
@@ -76,7 +43,7 @@
         <span>{{ phrase(r) }}{% if not r.action %} <span class="tag" title="Créée en mode avancé">avancée</span>{% endif %}</span>
       </span>
       <span class="ligne-meta regle-meta">
-        {% if r.action %}<a class="lien petit" href="/regles?modifier={{ r.id }}#creer">Modifier</a>
+        {% if r.action %}<a class="lien petit" href="/claude/hooks/mes-regles?modifier={{ r.id }}#creer">Modifier</a>
         {% else %}<a class="lien petit" href="/regles/{{ r.id }}/modifier">Modifier</a>{% endif %}
         <form method="post" action="/regles/{{ r.id }}/basculer"><input type="hidden" name="mode" value="simple">
           <button class="lien petit">{{ 'Désactiver' if r.actif else 'Activer' }}</button></form>
@@ -90,8 +57,6 @@
   <p class="note">Aucune règle personnelle pour l'instant : utilisez « Créer une règle » ci-dessus.</p>
   {% endif %}
 </section>
-
-{% with ouvert = not installe %}{% include "_installation_hook.html" %}{% endwith %}
 
 <script>
 (function () {  // champ texte et message selon l'action et la décision choisies

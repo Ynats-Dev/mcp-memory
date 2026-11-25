@@ -1,0 +1,34 @@
+{% extends "espace.html" %}
+{% block largeur_espace %}etroit{% endblock %}
+{% block onglet %}
+{% set cfg = etat.config %}
+<section class="carte" id="depot">
+  <div class="titre-bloc">
+    <h2>Dépôt de référence</h2>
+    {% if cfg.defaut %}<span class="pastille ok">Par défaut</span>{% else %}<span class="pastille dispo">Personnalisé</span>{% endif %}
+  </div>
+  <p class="note">Dépôt Git d'où viennent les mises à jour. Par défaut : <code>{{ cfg.url_defaut }}</code>
+     (branche <code>{{ cfg.branche_defaut }}</code>).</p>
+  <form method="post" action="/mise-a-jour/depot" class="formulaire">
+    <label>Adresse du dépôt <small class="note">https://…, ssh://… ou git@hôte:chemin — sans identifiants</small>
+      <input name="url" value="{{ cfg.url }}" required spellcheck="false" autocomplete="off"></label>
+    <label>Branche
+      <input name="branche" value="{{ cfg.branche }}" required spellcheck="false" autocomplete="off"
+             pattern="[A-Za-z0-9._/\-]+"></label>
+    <div class="actions">
+      <button class="primaire">Enregistrer</button>
+      {% if not cfg.defaut %}
+      <button class="lien" formaction="/mise-a-jour/depot/defaut" formnovalidate
+              onclick="return confirm('Revenir au dépôt par défaut ({{ cfg.url_defaut }}, {{ cfg.branche_defaut }}) ?')">
+        Revenir au dépôt par défaut</button>
+      {% endif %}
+    </div>
+  </form>
+  <p class="note">Enregistrer ne change que la source comparée : rien n'est installé avant un clic sur
+     « Mettre à jour ». Le code de ce dépôt est ensuite construit et exécuté sur le serveur : n'indiquer
+     qu'un dépôt de confiance. Dépôt privé : configurer l'accès sur l'hôte (clé SSH ou gestionnaire
+     d'identifiants Git de l'utilisateur du service). Si son historique n'a pas de lien avec la version
+     installée, la mise à jour aligne le dossier du serveur sur ce dépôt (fichiers non suivis comme
+     <code>.env</code> conservés ; le commit précédent est noté dans le journal).</p>
+</section>
+{% endblock %}

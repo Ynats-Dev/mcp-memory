@@ -1,0 +1,34 @@
+{#- Mise en page commune des espaces Claude, Connexion et Administration :
+    titre de l'espace, onglets, sous-onglets éventuels, puis le contenu de l'onglet.
+    Variables : nav_espace (titre, sous-titre, onglets, sous_onglets, onglet, sous_onglet), msg, erreur. -#}
+{% extends "base.html" %}
+{% block largeur %}{% block largeur_espace %}moyen{% endblock %}{% endblock %}
+{% block titre %}{{ nav_espace.titre_onglet }} — {{ nav_espace.titre }} — MCP Memory{% endblock %}
+{% block contenu %}
+<header class="page-tete tete-espace">
+  <div>
+    <p class="surtitre">{{ nav_espace.titre }}</p>
+    <h1>{{ nav_espace.titre_onglet }}</h1>
+    {% if nav_espace.sous_titre %}<p class="sous">{{ nav_espace.sous_titre }}</p>{% endif %}
+  </div>
+  <div class="actions">{% block actions %}{% endblock %}</div>
+</header>
+
+<nav class="onglets-espace" aria-label="{{ nav_espace.titre }}">
+  {% for cle, lib, url in nav_espace.onglets %}
+  <a href="{{ url }}" class="{{ 'actif' if cle == nav_espace.onglet }}"{% if cle == nav_espace.onglet %} aria-current="page"{% endif %}>{{ lib }}</a>
+  {% endfor %}
+</nav>
+{% if nav_espace.sous_onglets %}
+<nav class="onglets" aria-label="{{ nav_espace.titre_onglet }}">
+  {% for cle, lib, url in nav_espace.sous_onglets %}
+  <a href="{{ url }}" class="{{ 'actif' if cle == nav_espace.sous_onglet }}"{% if cle == nav_espace.sous_onglet %} aria-current="page"{% endif %}>{{ lib }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
+
+{% block onglet %}{% endblock %}
+{% endblock %}

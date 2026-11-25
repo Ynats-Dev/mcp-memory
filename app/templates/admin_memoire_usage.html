@@ -1,0 +1,50 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte" id="usage">
+  <div class="carte-tete">
+    <h2>Période</h2>
+    <nav class="filtres">{% for j, lib in [(1,"24 h"),(7,"7 j"),(30,"30 j"),(90,"90 j")] %}<a href="/admin/memoire/usage?jours={{ j }}" class="{{ 'actif' if usage.jours == j }}">{{ lib }}</a>{% endfor %}</nav>
+  </div>
+  {% if not usage.appels %}
+    <p class="note">Aucun appel d'outil MCP enregistré sur la période. Le journal commence au déploiement de cette version.</p>
+  {% else %}
+  <div class="tuiles">
+    <div class="tuile"><span class="tuile-val">{{ usage.tokens|tokens }}</span><span class="tuile-lib">servis à Claude</span></div>
+    <div class="tuile"><span class="tuile-val">{{ usage.appels }}</span><span class="tuile-lib">appels d'outils</span></div>
+    <div class="tuile"><span class="tuile-val">{{ usage.conversations_estimees }}</span><span class="tuile-lib">démarrages (vue_ensemble)</span></div>
+    <div class="tuile"><span class="tuile-val">{{ (usage.tokens // usage.conversations_estimees)|tokens if usage.conversations_estimees else '—' }}</span><span class="tuile-lib">par conversation (moyenne)</span></div>
+  </div>
+  {% if usage.par_jour|length > 1 %}
+  <div class="histo" role="img" aria-label="Tokens servis par jour">
+    {% for jour, v in usage.par_jour %}<div class="histo-barre" title="{{ jour }} : {{ v[1]|tokens }}, {{ v[0]}} appels"><span style="height:{{ (v[1] * 100 // usage.max_jour) if usage.max_jour else 0 }}%"></span></div>{% endfor %}
+  </div>
+  <p class="note">Tokens servis par jour, du {{ usage.par_jour[0][0] }} au {{ usage.par_jour[-1][0] }} (survoler une barre).</p>
+  {% endif %}
+  <div class="grille-usage">
+    <div><h3>Par projet</h3><table class="tableau"><tbody>
+      {% for p, t in usage.par_projet %}<tr><td><a href="/projet/{{ p }}">{{ p }}</a></td><td class="nb">{{ usage.appels_projet[p] }} appels</td><td class="nb">{{ t|tokens }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Par outil</h3><table class="tableau"><tbody>
+      {% for o, t in usage.par_outil %}<tr><td><code>{{ o }}</code></td><td class="nb">{{ t|tokens }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Documents les plus lus</h3><table class="tableau"><tbody>
+      {% for c, t in usage.docs_lus %}<tr><td><a href="/doc/{{ c }}"><code>{{ c }}</code></a></td><td class="nb">{{ t|tokens }}</td></tr>{% else %}<tr><td class="note">—</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Lus en entier <small class="note">(complet=true)</small></h3><table class="tableau"><tbody>
+      {% for c, n in usage.complets %}<tr><td><a href="/doc/{{ c }}"><code>{{ c }}</code></a></td><td class="nb">{{ n }} fois</td></tr>{% else %}<tr><td class="note">Aucun : bon signe.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Recherches sans résultat <small class="note">(trous possibles)</small></h3><table class="tableau"><tbody>
+      {% for q, n in usage.recherches_vides %}<tr><td>« {{ q }} »</td><td class="nb">{{ n }}</td></tr>{% else %}<tr><td class="note">Aucune.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div><h3>Écritures par auteur</h3><table class="tableau"><tbody>
+      {% for a, n in usage.ecritures %}<tr><td>{{ a }}</td><td class="nb">{{ n }}</td></tr>{% else %}<tr><td class="note">Aucune.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  {% if usage.erreurs %}
+  <h3>Dernières erreurs d'outils</h3>
+  <ul class="sante">{% for e in usage.erreurs %}<li><span class="note">{{ e.t|date_fr }}</span> <code>{{ e.outil }}</code>{% if e.chemin %} <code>{{ e.chemin }}</code>{% endif %} : {{ e.erreur }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="note">Estimation à 3,5 caractères par token. Le journal ne contient aucun contenu de document (outil, chemin, section, requête, taille, durée) ; conservé 12 mois.</p>
+  {% endif %}
+</section>
+{% endblock %}

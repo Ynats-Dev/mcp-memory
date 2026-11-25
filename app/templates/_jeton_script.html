@@ -1,0 +1,67 @@
+<script>
+// Jeton MCP conservé dans le localStorage de ce navigateur (jamais côté serveur) : il préremplit les
+// configurations (span.jeton, affiché masqué, copié en clair). Le formulaire n'existe que sur l'onglet Jeton.
+(function () {
+  var CLE = "mcp-memory.jeton", ESSAI = "COLLER_ICI_LE_MCP_TOKEN";
+  var champ = document.getElementById("jeton"), etat = document.getElementById("jeton-etat");
+  try {  // reprise du jeton enregistré sous l'ancien nom (mcp-serveur)
+    var ancien = localStorage.getItem("mcp-serveur.jeton");
+    if (ancien && !localStorage.getItem(CLE)) localStorage.setItem(CLE, ancien);
+    localStorage.removeItem("mcp-serveur.jeton");
+  } catch (e) {}
+  function lire() { try { return localStorage.getItem(CLE) || ""; } catch (e) { return ""; } }
+  function ecrire(v) { try { v ? localStorage.setItem(CLE, v) : localStorage.removeItem(CLE); return true; } catch (e) { return false; } }
+  function masque(j) { return j.length > 8 ? "•".repeat(12) + j.slice(-4) : "•".repeat(j.length); }
+  function signaler(texte, classe) { if (etat) { etat.textContent = texte; etat.className = "note " + (classe || ""); } }
+  function appliquer() {
+    var j = lire();
+    document.querySelectorAll("span.jeton").forEach(function (s) {
+      s.textContent = j ? masque(j) : ESSAI; s.classList.toggle("rempli", !!j);
+    });
+    document.querySelectorAll(".etat-jeton").forEach(function (e) {
+      e.innerHTML = j ? "Jeton du navigateur utilisé (…" + j.slice(-4) + ")."
+                      : "Aucun jeton enregistré : <a href=\"/clients/jeton\">l'enregistrer</a> pour préremplir les configurations.";
+    });
+    if (champ) champ.value = j;
+    if (j) signaler("Jeton enregistré dans ce navigateur (…" + j.slice(-4) + ").", "ok");
+  }
+  var form = document.getElementById("form-jeton");
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var j = champ.value.trim();
+      if (!j) { signaler("Collez d'abord le jeton.", "ko"); return; }
+      if (!ecrire(j)) { signaler("Ce navigateur refuse l'enregistrement (navigation privée ?).", "ko"); return; }
+      appliquer();
+    });
+    document.getElementById("jeton-oublier").addEventListener("click", function () {
+      ecrire(""); appliquer(); signaler("Jeton oublié.");
+    });
+    document.getElementById("jeton-voir").addEventListener("click", function () {
+      champ.type = champ.type === "password" ? "text" : "password";
+    });
+    document.getElementById("jeton-verifier").addEventListener("click", function () {
+      var j = champ.value.trim() || lire();
+      if (!j) { signaler("Collez d'abord le jeton.", "ko"); return; }
+      signaler("Vérification…");
+      fetch("/claude/verifier-jeton", {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify({jeton: j})})
+        .then(function (r) { return r.json(); })
+        .then(function (d) { signaler(d.message, d.valide ? "ok" : "ko"); })
+        .catch(function () { signaler("Vérification impossible.", "ko"); });
+    });
+  }
+  document.querySelectorAll("button.copier").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var j = lire(), clone = document.getElementById(b.dataset.cible).cloneNode(true),
+          avecJeton = clone.querySelector("span.jeton") !== null;
+      clone.querySelectorAll("span.jeton").forEach(function (s) { s.textContent = j || ESSAI; });
+      navigator.clipboard.writeText(clone.textContent).then(function () {
+        b.textContent = (j || !avecJeton) ? "Copié" : "Copié (sans jeton)";
+        setTimeout(function () { b.textContent = "Copier"; }, 1800);
+      }, function () { b.textContent = "Échec"; });
+    });
+  });
+  appliquer();
+})();
+</script>

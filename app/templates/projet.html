@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block titre %}{{ projet.titre }} — MCP Memory{% endblock %}
 {% block contenu %}
+{% set genre = 'sous-projet' if parent else 'projet' %}
+{% set base = '/projet/' ~ projet.slug %}
 <nav class="fil-ariane"><a href="/">Accueil</a><span>/</span>{% if parent %}<a href="/projet/{{ parent.slug }}">{{ parent.titre }}</a><span>/</span>{% endif %}<span>{{ projet.titre }}</span></nav>
 {% if msg %}<p class="info">{{ msg }}</p>{% endif %}
 
-<header class="page-tete">
+<header class="page-tete tete-espace">
   <div class="tete-projet">
     <span class="pastille-projet grande" aria-hidden="true">{{ projet.titre[:1]|upper }}</span>
     <div>
@@ -12,58 +14,30 @@
       {% if projet.description %}<p class="sous">{{ projet.description }}</p>{% endif %}
       {% if info and info.docs %}
       <div class="metriques">
-        <span><strong>{{ actifs|length + (1 if resume else 0) }}</strong> document{{ 's' if actifs|length + (1 if resume else 0) > 1 }}{% if archives %} · {{ archives|length }} archive{{ 's' if archives|length > 1 }}{% endif %}</span>
         <span title="Ce que Claude charge au début d'une conversation">Démarrage : <strong>{{ info.demarrage|tokens }}</strong></span>
-        {% if info.alertes %}<a href="/memoire#sante-{{ projet.slug }}" class="pastille {{ 'ko' if info.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ info.alertes|length }} point{{ 's' if info.alertes|length > 1 }} de santé</a>{% else %}<span class="pastille ok">Santé OK</span>{% endif %}
+        {% if info.alertes %}<a href="/admin/memoire/sante#sante-{{ projet.slug.split('/')[0] }}" class="pastille {{ 'ko' if info.alertes|selectattr('niveau','equalto','important')|list else 'dispo' }}">{{ info.alertes|length }} point{{ 's' if info.alertes|length > 1 }} de santé</a>{% else %}<span class="pastille ok">Santé OK</span>{% endif %}
       </div>
       {% endif %}
     </div>
   </div>
   <div class="actions">
-    {% if not parent %}
-    <details class="deroulant">
-      <summary class="bouton">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/></svg>Fichier pour Claude</summary>
-      <form method="get" action="/claude/fichier" class="deroulant-panneau formulaire">
-        <input type="hidden" name="categorie" value="{{ projet.slug }}">
-        <p class="note">À déposer dans le <strong>Contexte</strong> du projet Claude, à la place des anciens fichiers.</p>
-        <label class="case"><input type="radio" name="autonome" value="1" checked>
-          Claude met le contexte à jour tout seul</label>
-        <label class="case"><input type="radio" name="autonome" value="">
-          Claude propose et attend mon accord</label>
-        <div class="actions">
-          <button class="primaire">Télécharger</button>
-          <button class="lien petit" formaction="/claude#apercu" name="apercu" value="1">Aperçu</button>
-        </div>
-      </form>
-    </details>
-    {% endif %}
-    <details class="deroulant menu-plus">
-      <summary class="bouton" aria-label="Plus d'actions">
-        <svg viewBox="0 0 24 24" class="ic"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg>Plus</summary>
-      <div class="deroulant-panneau liste-actions">
-        <label for="depot-fichiers" class="action"><svg viewBox="0 0 24 24" class="ic"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>Importer des fichiers .md
-          <small>ou glisser-déposer n'importe où sur la page</small></label>
-        <label class="case action-case"><input type="checkbox" id="depot-remplacer"> remplacer les documents existants</label>
-        {% if projet.nb %}<a class="action" href="/projet/{{ projet.slug }}/export"><svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Exporter en .zip
-          <small>tous les documents, archives comprises</small></a>{% endif %}
-        {% if not parent %}
-        <a class="action" href="/projets/nouveau?parent={{ projet.slug }}"><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>Nouveau sous-projet
-          <small>pour isoler un sujet : Claude ne charge que lui</small></a>
-        {% endif %}
-        <a class="action" href="/projet/{{ projet.slug }}/modifier"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Renommer, décrire le {{ 'sous-projet' if parent else 'projet' }}</a>
-        {% if not projet.nb and not projet.sous_projets %}
-        <form method="post" action="/projet/{{ projet.slug }}/supprimer" onsubmit="return confirm('Supprimer ce {{ 'sous-projet' if parent else 'projet' }} vide ?')">
-          <button class="action danger"><svg viewBox="0 0 24 24" class="ic"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Supprimer le {{ 'sous-projet' if parent else 'projet' }}</button></form>
-        {% endif %}
-      </div>
-    </details>
     <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}">
       <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouveau document</a>
   </div>
 </header>
 
-<form class="depot" id="depot" data-url="/projet/{{ projet.slug }}/importer">
+{% set nb_docs = actifs|length + archives|length %}
+<nav class="onglets-espace" aria-label="{{ projet.titre }}">
+  {% for cle, lib in [('documents', 'Documents'), ('sous-projets', 'Sous-projets'), ('resume', 'Fiche résumé'),
+                      ('fichiers', 'Importer / Exporter'), ('parametres', 'Paramètres')] if cle != 'sous-projets' or not parent %}
+  <a href="{{ base }}{{ '?onglet=' ~ cle if cle != 'documents' }}" class="{{ 'actif' if cle == onglet }}"{% if cle == onglet %} aria-current="page"{% endif %}>{{ lib }}
+    {%- if cle == 'documents' and nb_docs %} <span class="n">{{ nb_docs }}</span>{% endif %}
+    {%- if cle == 'sous-projets' and projet.sous_projets %} <span class="n">{{ projet.sous_projets|length }}</span>{% endif %}
+    {%- if cle == 'resume' and not resume and docs %} <span class="pastille ko">absente</span>{% endif %}</a>
+  {% endfor %}
+</nav>
+
+<form class="depot" id="depot" data-url="{{ base }}/importer">
   <input type="file" id="depot-fichiers" accept=".md,.markdown,text/markdown" multiple hidden>
   <ul class="depot-resultats" id="depot-resultats" hidden></ul>
   <div class="depot-voile" id="depot-voile" aria-hidden="true">
@@ -75,14 +49,18 @@
   </div>
 </form>
 
-{% if procedures %}
-<div class="bandeau-directives">
-  <svg viewBox="0 0 24 24" class="ic"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
-  <span><strong>Procédures.</strong> Le titre de chaque document de ce projet est transmis à Claude à chaque connexion ;
-    Claude lit la procédure avant d'effectuer la tâche qu'elle couvre. Donnez des titres explicites
-    (« Diagnostic DNS maison », « Publier une release »).</span>
-</div>
-{% endif %}
+{% macro grille_sous_projets() %}
+  <div class="grille-sous-projets">
+  {% for sp in projet.sous_projets %}
+    {% set si = infos_sous.get(sp.slug) %}
+    <a class="carte-sous-projet" href="/projet/{{ sp.slug }}">
+      <strong><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>{{ sp.titre }}</strong>
+      {% if sp.description %}<span>{{ sp.description }}</span>{% endif %}
+      <span class="note">{{ sp.nb }} document{{ 's' if sp.nb > 1 }}{% if si and si.docs %} · démarrage {{ si.demarrage|tokens }}{% endif %}{% if si and sp.nb and not si.resume %} · sans fiche résumé{% endif %}</span>
+    </a>
+  {% endfor %}
+  </div>
+{% endmacro %}
 
 {% macro ligne_doc(i) %}
   <a class="ligne ligne-doc-projet" href="/doc/{{ i.doc.chemin }}">
@@ -96,64 +74,147 @@
   </a>
 {% endmacro %}
 
-{% if resume %}
-<section class="fiche-resume">
-  <div class="titre-bloc">
-    <h2><svg viewBox="0 0 24 24" class="ic"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5M9 8h3"/></svg>Fiche résumé
-      <span class="note">· ce que Claude lit en premier · {{ resume.tokens|tokens }}</span></h2>
-    <a class="lien petit" href="/editer/{{ resume.doc.chemin }}">Modifier</a>
+{# ------------------------------------------------------------------ Documents #}
+{% if onglet == 'documents' %}
+  {% if projet.sous_projets %}
+  <section class="bloc">
+    <div class="titre-bloc"><h2>Sous-projets <span class="n">{{ projet.sous_projets|length }}</span></h2></div>
+    {{ grille_sous_projets() }}
+  </section>
+  {% endif %}
+  {% if procedures %}
+  <div class="bandeau-directives">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+    <span><strong>Procédures.</strong> Le titre de chaque document est transmis à Claude à chaque connexion ; Claude lit
+      la procédure avant d'effectuer la tâche qu'elle couvre (<a href="/claude/procedures">Claude › Procédures</a>).</span>
   </div>
-  <div class="fiche-resume-corps prose" id="fiche-resume">{{ resume.doc.contenu|sans_titre(resume.doc.titre)|markdown|cases|liens_documents|safe }}</div>
-  <button type="button" class="lien petit deplier" id="deplier-fiche">Afficher toute la fiche</button>
-</section>
-{% elif docs %}
-<p class="alerte"><span>Ce projet n'a pas de fiche résumé : <code>vue_ensemble</code> n'a rien à présenter à Claude en tête de conversation.
-  <a href="/nouveau?projet={{ projet.slug }}">Créer <code>{{ projet.slug }}/resume</code></a></span></p>
-{% endif %}
-
-{% if projet.sous_projets %}
-<section class="bloc">
-  <div class="titre-bloc"><h2>Sous-projets <span class="n">{{ projet.sous_projets|length }}</span></h2>
-    <a class="lien petit" href="/projets/nouveau?parent={{ projet.slug }}">+ Sous-projet</a></div>
-  <div class="grille-sous-projets">
-  {% for sp in projet.sous_projets %}
-    {% set si = infos_sous.get(sp.slug) %}
-    <a class="carte-sous-projet" href="/projet/{{ sp.slug }}">
-      <strong><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>{{ sp.titre }}</strong>
-      {% if sp.description %}<span>{{ sp.description }}</span>{% endif %}
-      <span class="note">{{ sp.nb }} document{{ 's' if sp.nb > 1 }}{% if si and si.docs %} · démarrage {{ si.demarrage|tokens }}{% endif %}{% if si and sp.nb and not si.resume %} · sans fiche résumé{% endif %}</span>
+  {% endif %}
+  {% if resume %}
+  <div class="liste-lignes">
+    <a class="ligne ligne-doc-projet" href="{{ base }}?onglet=resume">
+      <span class="ligne-titre"><strong>Fiche résumé</strong> <span class="note">· ce que Claude lit en premier</span></span>
+      <span class="ligne-meta"><span class="ligne-taille">{{ resume.tokens|tokens }}</span><span>{{ resume.doc.maj|date_fr(false) }}</span></span>
     </a>
-  {% endfor %}
   </div>
-</section>
+  {% endif %}
+  {% if actifs %}
+  <section class="bloc">
+    <div class="liste-lignes">{% for i in actifs %}{{ ligne_doc(i) }}{% endfor %}</div>
+  </section>
+  {% endif %}
+  {% if archives %}
+  <details class="bloc archives">
+    <summary class="titre-bloc"><h2>Archives <span class="n">{{ archives|length }}</span></h2>
+      <span class="note">journaux et anciennes versions, lus par Claude seulement sur demande · {{ info.tokens_archives|tokens }}</span></summary>
+    <div class="liste-lignes">{% for i in archives %}{{ ligne_doc(i) }}{% endfor %}</div>
+  </details>
+  {% endif %}
+  {% if not docs and not projet.sous_projets %}
+  <div class="vide">
+    <span class="icone"><svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></span>
+    <h2>Aucun document</h2>
+    <p>Créez un document, déplacez-y un document existant (bouton « Déplacer » sur sa page),
+       ou glissez des fichiers .md sur cette page.</p>
+    <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}">Nouveau document</a>
+  </div>
+  {% endif %}
+
+{# ------------------------------------------------------------------ Sous-projets #}
+{% elif onglet == 'sous-projets' %}
+  <p class="note">Un sous-projet isole un sujet (une machine, un thème) : Claude ne charge que lui
+     (<code>vue_ensemble(projet="{{ projet.slug }}/…")</code>), et une seule ligne apparaît dans l'index du projet.</p>
+  {% if projet.sous_projets %}
+  {{ grille_sous_projets() }}
+  {% endif %}
+  <div class="actions"><a class="bouton" href="/projets/nouveau?parent={{ projet.slug }}">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Nouveau sous-projet</a></div>
+
+{# ------------------------------------------------------------------ Fiche résumé #}
+{% elif onglet == 'resume' %}
+  {% if resume %}
+  <section class="fiche-resume">
+    <div class="titre-bloc">
+      <h2>Ce que Claude lit en premier <span class="note">· {{ resume.tokens|tokens }} · {{ resume.doc.maj|date_fr }}</span></h2>
+      <a class="bouton" href="/editer/{{ resume.doc.chemin }}">Modifier</a>
+    </div>
+    <div class="prose">{{ resume.doc.contenu|sans_titre(resume.doc.titre)|markdown|cases|liens_documents|safe }}</div>
+  </section>
+  <p class="note">Visée : ~500 tokens (machines, adresses, rôles, accès). Document <a href="/doc/{{ resume.doc.chemin }}"><code>{{ resume.doc.chemin }}</code></a>.</p>
+  {% else %}
+  <div class="vide">
+    <h2>Pas de fiche résumé</h2>
+    <p><code>vue_ensemble</code> n'a rien à présenter à Claude en tête de conversation. Une fiche courte (~500 tokens) :
+       l'essentiel du {{ genre }}, ses machines, adresses, accès.</p>
+    <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}&nom=resume">Créer <code>{{ projet.slug }}/resume</code></a>
+  </div>
+  {% endif %}
+
+{# ------------------------------------------------------------------ Importer / Exporter #}
+{% elif onglet == 'fichiers' %}
+  <section class="carte">
+    <h2>Importer des fichiers .md</h2>
+    <p>Glisser des fichiers <code>.md</code> n'importe où sur cette page, ou :</p>
+    <div class="actions">
+      <label for="depot-fichiers" class="bouton"><svg viewBox="0 0 24 24" class="ic"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>Choisir des fichiers</label>
+      <label class="case"><input type="checkbox" id="depot-remplacer"> remplacer les documents existants</label>
+    </div>
+    <p class="note">« serveur nas_0145.md » devient <code>{{ projet.slug }}/serveur-nas</code> (suffixe horaire de claude.ai retiré).</p>
+  </section>
+  <section class="carte">
+    <h2>Exporter</h2>
+    {% if projet.nb %}
+    <p>Archive <code>.zip</code> de tous les documents du {{ genre }}, archives{{ ' et sous-projets' if projet.sous_projets }} comprises.</p>
+    <div class="actions"><a class="bouton" href="{{ base }}/export">Exporter en .zip</a></div>
+    {% else %}<p class="note">Aucun document à exporter.</p>{% endif %}
+  </section>
+  {% if not parent %}
+  <section class="carte">
+    <h2>Fichier pour un projet Claude</h2>
+    <p>À déposer dans le <strong>Contexte</strong> du projet Claude, à la place des anciens fichiers.</p>
+    <form method="get" action="/claude/fichier" class="formulaire">
+      <input type="hidden" name="categorie" value="{{ projet.slug }}">
+      <label class="case"><input type="radio" name="autonome" value="1" checked> Claude met le contexte à jour tout seul</label>
+      <label class="case"><input type="radio" name="autonome" value=""> Claude propose et attend mon accord</label>
+      <div class="actions">
+        <button class="primaire">Télécharger</button>
+        <button class="lien petit" formaction="/clients/projet#apercu" name="apercu" value="1">Aperçu</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+{# ------------------------------------------------------------------ Paramètres #}
+{% elif onglet == 'parametres' %}
+  <section class="carte">
+    <h2>Nom, identifiant, description</h2>
+    <dl class="maj-versions">
+      <dt>Nom</dt><dd>{{ projet.titre }}</dd>
+      <dt>Identifiant</dt><dd><code>{{ projet.slug }}</code> <span class="note">(préfixe des documents)</span></dd>
+      <dt>Description</dt><dd>{{ projet.description or '—' }}</dd>
+    </dl>
+    <div class="actions"><a class="bouton" href="{{ base }}/modifier">Renommer, décrire</a></div>
+  </section>
+  {% if not parent %}
+  <section class="carte">
+    <h2>Sous-projets</h2>
+    <p class="note">Pour isoler un sujet : Claude ne chargera que lui.</p>
+    <div class="actions"><a class="bouton" href="/projets/nouveau?parent={{ projet.slug }}">Nouveau sous-projet</a></div>
+  </section>
+  {% endif %}
+  <section class="carte">
+    <h2>Supprimer le {{ genre }}</h2>
+    {% if not projet.nb and not projet.sous_projets %}
+    <form method="post" action="{{ base }}/supprimer" onsubmit="return confirm('Supprimer ce {{ genre }} vide ?')">
+      <button class="danger">Supprimer le {{ genre }}</button></form>
+    {% else %}
+    <p class="note">Possible seulement quand il est vide : déplacer ou supprimer d'abord ses
+      {{ projet.nb }} document(s){{ ' et ses sous-projets' if projet.sous_projets }}.</p>
+    {% endif %}
+  </section>
 {% endif %}
 
-{% if actifs %}
-<section class="bloc">
-  <div class="titre-bloc"><h2>Documents <span class="n">{{ actifs|length }}</span></h2></div>
-  <div class="liste-lignes">{% for i in actifs %}{{ ligne_doc(i) }}{% endfor %}</div>
-</section>
-{% endif %}
-
-{% if archives %}
-<details class="bloc archives">
-  <summary class="titre-bloc"><h2>Archives <span class="n">{{ archives|length }}</span></h2>
-    <span class="note">journaux et anciennes versions, lus par Claude seulement sur demande · {{ info.tokens_archives|tokens }}</span></summary>
-  <div class="liste-lignes">{% for i in archives %}{{ ligne_doc(i) }}{% endfor %}</div>
-</details>
-{% endif %}
-
-{% if not docs and not projet.sous_projets %}
-<div class="vide">
-  <span class="icone"><svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></span>
-  <h2>Projet vide</h2>
-  <p>Créez un document ici, déplacez-y un document existant (bouton « Déplacer » sur sa page),
-     ou glissez des fichiers .md sur cette page.</p>
-  <a class="bouton primaire" href="/nouveau?projet={{ projet.slug }}">Nouveau document</a>
-</div>
-{% endif %}
 <script>
-// Glisser-déposer de fichiers Markdown : envoi groupé, résultat par fichier, puis rechargement.
+// Glisser-déposer de fichiers Markdown (tous les onglets) : envoi groupé, résultat par fichier.
 (function () {
   var form = document.getElementById("depot"), zone = document.getElementById("depot-voile"),
       champ = document.getElementById("depot-fichiers"), liste = document.getElementById("depot-resultats"),
@@ -161,9 +222,9 @@
   function envoyer(fichiers) {
     fichiers = Array.prototype.filter.call(fichiers, function (f) { return f.size >= 0; });
     if (!fichiers.length) return;
-    var donnees = new FormData();
+    var donnees = new FormData(), remplacer = document.getElementById("depot-remplacer");
     fichiers.forEach(function (f) { donnees.append("fichiers", f, f.name); });
-    if (document.getElementById("depot-remplacer").checked) donnees.append("remplacer", "1");
+    if (remplacer && remplacer.checked) donnees.append("remplacer", "1");
     form.classList.add("envoi");
     liste.hidden = false;
     liste.innerHTML = "<li>Envoi de " + fichiers.length + " fichier(s)…</li>";
@@ -181,7 +242,7 @@
         });
         if (ok) {
           var li = document.createElement("li");
-          li.innerHTML = '<a href="">Actualiser la liste</a>';
+          li.innerHTML = '<a href="{{ base }}">Voir les documents</a>';
           liste.appendChild(li);
         }
       })
@@ -189,14 +250,6 @@
       .finally(function () { form.classList.remove("envoi"); champ.value = ""; });
   }
   champ.addEventListener("change", function () { envoyer(champ.files); });
-  var fiche = document.getElementById("fiche-resume"), deplier = document.getElementById("deplier-fiche");
-  if (fiche && deplier) {
-    if (fiche.scrollHeight <= fiche.clientHeight + 4) deplier.hidden = true;
-    deplier.addEventListener("click", function () {
-      var ouvert = fiche.classList.toggle("ouverte");
-      deplier.textContent = ouvert ? "Réduire" : "Afficher toute la fiche";
-    });
-  }
   function avecFichiers(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, "Files") >= 0; }
   document.addEventListener("dragenter", function (e) {
     if (!avecFichiers(e)) return;

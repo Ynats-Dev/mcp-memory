@@ -1,0 +1,29 @@
+{% extends "espace.html" %}
+{% block onglet %}
+<section class="carte">
+  <h2>Le plus simple : demander à Claude Code</h2>
+  <p>Ouvrir Claude Code sur le poste et lui demander :</p>
+  <div class="bloc-copie">
+    <button type="button" class="copier" data-cible="demande-installation">Copier</button>
+<pre id="demande-installation">Installe MCP Memory sur ce poste en suivant {{ url_installation(request) }}</pre>
+  </div>
+  <p class="note">Il enregistre le serveur (en vous demandant le jeton), pose le hook des <a href="/claude/hooks">règles</a>
+     et deux filets locaux (avertissement si le serveur est injoignable, règles Git appliquées même serveur éteint),
+     règle l'attribution et la confirmation des <code>git push</code>, puis vérifie le tout.</p>
+</section>
+
+<section class="carte">
+  <h2>À la main : enregistrer le serveur</h2>
+  <p class="etat-jeton note"></p>
+  <div class="bloc-copie">
+    <button type="button" class="copier" data-cible="conf-code">Copier</button>
+<pre id="conf-code">claude mcp add --transport http --scope user mcp-memory {{ url }} \
+  --header "Authorization: Bearer <span class="jeton">COLLER_ICI_LE_MCP_TOKEN</span>"</pre>
+  </div>
+  <p class="note">Vérifier : <code>claude mcp list</code> (le serveur doit être « Connected ») et
+     <code>claude mcp get mcp-memory</code> (<code>Scope: User config</code>).</p>
+</section>
+
+{% with ouvert = true %}{% include "_installation_hook.html" %}{% endwith %}
+{% include "_jeton_script.html" %}
+{% endblock %}

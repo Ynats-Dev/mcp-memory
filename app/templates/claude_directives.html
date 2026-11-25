@@ -1,0 +1,30 @@
+{% extends "espace.html" %}
+{% block actions %}
+{% if directives %}
+<a class="bouton" href="/doc/directives#versions">Versions</a>
+<a class="bouton primaire" href="/editer/directives">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Modifier</a>
+{% endif %}
+{% endblock %}
+{% block onglet %}
+<div class="bandeau-directives">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+  <span>Règles de conduite valables dans <strong>toutes</strong> les conversations : elles sont transmises à Claude
+    à chaque connexion au serveur, dans tous les clients (Claude Code, Claude Desktop, claude.ai, VS Code).
+    Restez bref : chaque ligne est chargée dans chaque conversation{% if directives %} ({{ taille|tokens }}){% endif %}.
+    {% if taille > 2000 %}<strong>Au-delà de ~2k tokens, seul un renvoi vers le document est transmis.</strong>{% endif %}
+    Pour <em>imposer</em> une règle dans Claude Code : <a href="/claude/hooks">Hooks</a>.</span>
+</div>
+{% if directives %}
+<section class="carte prose">
+  {{ directives.contenu|sans_titre(directives.titre)|markdown|cases|liens_documents|safe }}
+</section>
+<p class="note">Document <code>directives</code> · modifié le {{ directives.maj|date_fr }}.</p>
+{% else %}
+<div class="vide">
+  <h2>Aucune directive</h2>
+  <p>Exemples : « Toujours répondre en français », « Jamais de git push sans mon accord », « Commits sous mon nom ».</p>
+  <a class="bouton primaire" href="/nouveau?nom=directives">Créer les directives</a>
+</div>
+{% endif %}
+{% endblock %}

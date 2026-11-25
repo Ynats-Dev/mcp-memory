@@ -3,7 +3,7 @@
 {% block titre %}{{ 'Modifier la règle' if regle else 'Nouvelle règle' }} — MCP Memory{% endblock %}
 {% block contenu %}
 {% set ancien = ancien_id if ancien_id is defined else (regle.id if regle else '') %}
-<nav class="fil-ariane"><a href="/regles">Hooks</a><span>/</span><span>{{ regle.nom if regle and regle.nom else 'Nouvelle règle' }}</span></nav>
+<nav class="fil-ariane"><a href="/claude/hooks/avance">Hooks</a><span>/</span><span>{{ regle.nom if regle and regle.nom else 'Nouvelle règle' }}</span></nav>
 <header class="page-tete"><h1>{{ 'Modifier la règle' if ancien else 'Nouvelle règle' }}</h1></header>
 {% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
 
@@ -35,7 +35,7 @@
   <label class="case"><input type="checkbox" name="actif" value="1" {{ 'checked' if not regle or regle.actif }}> Règle active</label>
   <div class="actions">
     <button class="primaire">Enregistrer</button>
-    <a class="lien" href="/regles">Annuler</a>
+    <a class="lien" href="/claude/hooks/avance">Annuler</a>
   </div>
 </form>
 {% if not ancien %}

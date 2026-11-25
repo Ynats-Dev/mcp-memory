@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <title>{% block titre %}MCP Memory{% endblock %}</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c1e'/%3E%3Cpath d='M9 11l7-4 7 4v10l-7 4-7-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/style.css?v=25">
+<link rel="stylesheet" href="/static/style.css?v=29">
 </head>
 {% set ici = request.url.path %}
 <body>
@@ -34,15 +34,10 @@
     <nav class="menu cats" id="nav-projets">
       {% for p in nav.projets %}
       {% set dans_projet = ici == '/projet/' ~ p.slug or ici.startswith('/projet/' ~ p.slug ~ '/') or ici.startswith('/doc/' ~ p.slug ~ '/') or ici.startswith('/editer/' ~ p.slug ~ '/') %}
-      {% set dans_sous = p.sous_projets|selectattr('slug', 'in', [ici[8:], ici[5:].rpartition('/')[0], ici[8:].rpartition('/')[0]])|list %}
       <div class="groupe-projet" data-slug="{{ p.slug }}">
-        <a href="/projet/{{ p.slug }}" draggable="true" title="{{ p.titre }} — glisser pour réordonner" class="projet-nav {{ 'actif' if dans_projet and not dans_sous }} {{ 'parent-actif' if dans_sous }}">
+        <a href="/projet/{{ p.slug }}" draggable="true" title="{{ p.titre }} — glisser pour réordonner" class="projet-nav {{ 'actif' if dans_projet }}">
           <span class="pastille-projet" aria-hidden="true">{{ p.titre[:1]|upper }}</span>
           <span class="lib-projet">{{ p.titre }}</span><span class="compte">{{ p.nb }}</span></a>
-        {% for sp in p.sous_projets %}
-        <a href="/projet/{{ sp.slug }}" class="sous-nav {{ 'actif' if sp in dans_sous }}" title="{{ sp.titre }}{{ ' — ' ~ sp.description if sp.description }}">
-          <span class="lib-projet">{{ sp.titre }}</span><span class="compte">{{ sp.nb }}</span></a>
-        {% endfor %}
       </div>
       {% else %}
       <a href="/projets/nouveau" class="vide-nav">Créer un premier projet</a>
@@ -53,27 +48,21 @@
       {% endif %}
     </nav>
 
-    <div class="menu-titre menu-titre-outils">Outils</div>
+    <div class="menu-titre menu-titre-outils">Espaces</div>
     <nav class="menu outils">
-      <a href="/doc/directives" class="{{ 'actif' if ici == '/doc/directives' or ici == '/editer/directives' }}" title="Consignes transmises à Claude à chaque connexion">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span class="lib">Directives</span></a>
-      <a href="/regles" class="{{ 'actif' if ici.startswith('/regles') }}" title="Règles appliquées aux actions de Claude Code">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="lib">Hooks</span></a>
-      <a href="/memoire" class="{{ 'actif' if ici == '/memoire' }}">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span class="lib">Mémoire</span></a>
-      <a href="/historique" class="{{ 'actif' if ici == '/historique' or ici.startswith('/commit/') }}">
-        <svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="lib">Historique</span></a>
-      <a href="/claude" class="{{ 'actif' if ici.startswith('/claude') }}">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/></svg><span class="lib">Connexion Claude</span></a>
-      <a href="/mise-a-jour" class="{{ 'actif' if ici == '/mise-a-jour' }}">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/></svg><span class="lib">Mise à jour</span>
+      <a href="/claude" class="{{ 'actif' if ici.startswith('/claude/') or ici == '/claude' or (ici.startswith('/doc/directives') or ici.startswith('/regles')) }}" title="Directives, procédures et hooks : comment Claude se comporte">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M18.5 15.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"/></svg><span class="lib">Claude</span></a>
+      <a href="/clients" class="{{ 'actif' if ici.startswith('/clients') }}" title="Brancher Claude Code, Claude Desktop, claude.ai ou un projet Claude">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg><span class="lib">Connexion</span></a>
+      <a href="/admin" class="{{ 'actif' if ici.startswith('/admin') or ici.startswith('/commit/') }}" title="Mémoire, historique, sauvegarde, mise à jour, compte">
+        <svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span class="lib">Administration</span>
         {% if maj_disponible() %}<span class="point-maj" title="Mise à jour disponible"></span>{% endif %}</a>
     </nav>
 
     {% set moi = utilisateur_courant(request) %}
     {% if moi %}
     <div class="session">
-      <a href="/compte" class="{{ 'actif' if ici == '/compte' }}" title="Mon compte">
+      <a href="/admin/compte" class="{{ 'actif' if ici == '/admin/compte' }}" title="Mon compte">
         <span class="avatar">{{ moi[:1]|upper }}</span><span class="lib">{{ moi }}</span></a>
       <form method="post" action="/deconnexion">
         <button class="icone-seule" title="Se déconnecter" aria-label="Se déconnecter">
