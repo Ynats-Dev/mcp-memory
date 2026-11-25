@@ -2,7 +2,6 @@
     titre de l'espace, onglets, sous-onglets éventuels, puis le contenu de l'onglet.
     Variables : nav_espace (titre, sous-titre, onglets, sous_onglets, onglet, sous_onglet), msg, erreur. -#}
 {% extends "base.html" %}
-{% block largeur %}{% block largeur_espace %}moyen{% endblock %}{% endblock %}
 {% block titre %}{{ nav_espace.titre_onglet }} — {{ nav_espace.titre }} — MCP Memory{% endblock %}
 {% block contenu %}
 <header class="page-tete tete-espace">

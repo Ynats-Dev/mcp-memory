@@ -45,7 +45,7 @@ Un **projet** regroupe les documents d'un même sujet : son identifiant sert de 
 (`maison/serveur-nas`) et de périmètre au fichier de projet pour Claude. Il est décrit
 par `contexte/<projet>/.projet.yml` (titre, description) et existe même vide.
 Interface web : créer, modifier, renommer (déplace tous ses documents), supprimer (s'il est
-vide), réordonner par glisser-déposer dans la barre latérale ; sur un document, **Déplacer**
+vide), réordonner dans la barre latérale (bouton **Réorganiser**, puis glisser-déposer) ; sur un document, **Déplacer**
 le range dans un autre projet ou sous-projet. L'historique suit le document lors des
 déplacements.
 
