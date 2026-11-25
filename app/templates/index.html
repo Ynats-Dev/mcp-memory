@@ -45,7 +45,7 @@
       </span>
     </a>
     <dl class="carte-projet-stats">
-      <div><dt>Documents</dt><dd>{{ nb_actifs }}{% if nb_archives %} <span class="note">+ {{ nb_archives }} archive{{ 's' if nb_archives > 1 }}</span>{% endif %}</dd></div>
+      <div><dt>Documents</dt><dd>{{ nb_actifs }}{% if nb_archives %} <span class="note">+ {{ nb_archives }} archive{{ 's' if nb_archives > 1 }}</span>{% endif %}{% if p.sous_projets %} <span class="note">· {{ p.sous_projets|length }} sous-projet{{ 's' if p.sous_projets|length > 1 }}</span>{% endif %}</dd></div>
       <div><dt>Démarrage</dt><dd title="Ce que Claude charge au début d'une conversation de ce projet">{{ i.demarrage|tokens if i and i.docs else '—' }}</dd></div>
       <div><dt>Modifié</dt><dd>{{ i.maj|date_fr(false) if i and i.maj else '—' }}</dd></div>
     </dl>
@@ -59,6 +59,20 @@
   </article>
 {% endfor %}
 </div>
+
+<section class="bloc">
+  <div class="bandeau-directives">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+    {% if directives %}
+    <span><strong><a href="/doc/directives">Directives globales</a></strong> — transmises à Claude à chaque connexion,
+      dans tous les clients ({{ directives.contenu|length // 4 }} tokens environ).
+      {% if projets|selectattr('slug', 'equalto', 'procedures')|list %}Procédures : <a href="/projet/procedures">projet « procedures »</a>.{% endif %}</span>
+    {% else %}
+    <span><strong>Aucune directive globale.</strong> Les consignes du document <code>directives</code> (langue, règles Git…)
+      sont transmises à Claude à chaque connexion. <a href="/nouveau?nom=directives">Créer le document</a></span>
+    {% endif %}
+  </div>
+</section>
 
 {% if sans_projet %}
 <section class="bloc" id="sans-projet">

@@ -1,31 +1,38 @@
 {% extends "base.html" %}
 {% block largeur %}etroit{% endblock %}
-{% block titre %}{% if projet %}Modifier « {{ projet.titre }} »{% else %}Nouveau projet{% endif %} — MCP Memory{% endblock %}
+{% block titre %}{% if projet %}Modifier « {{ projet.titre }} »{% else %}Nouveau {{ 'sous-projet' if parent else 'projet' }}{% endif %} — MCP Memory{% endblock %}
 {% block contenu %}
+{% set genre = 'sous-projet' if parent else 'projet' %}
 <nav class="fil-ariane">
   <a href="/">Accueil</a><span>/</span>
-  {% if projet %}<a href="/projet/{{ projet.slug }}">{{ projet.titre }}</a><span>/</span><span>Modifier</span>{% else %}<span>Nouveau projet</span>{% endif %}
+  {% if parent %}<a href="/projet/{{ parent.slug }}">{{ parent.titre }}</a><span>/</span>{% endif %}
+  {% if projet %}<a href="/projet/{{ projet.slug }}">{{ projet.titre }}</a><span>/</span><span>Modifier</span>{% else %}<span>Nouveau {{ genre }}</span>{% endif %}
 </nav>
 <header class="page-tete">
-  <h1>{% if projet %}Modifier le projet{% else %}Nouveau projet{% endif %}</h1>
+  <h1>{% if projet %}Modifier le {{ genre }}{% else %}Nouveau {{ genre }}{% endif %}</h1>
+  {% if parent and not projet %}<p class="sous">Dans « {{ parent.titre }} ». Claude pourra charger ce sous-projet seul
+    (<code>vue_ensemble(projet="{{ parent.slug }}/…")</code>), sans le reste du projet.</p>{% endif %}
 </header>
 
 <form method="post" class="carte formulaire"
       action="{{ '/projet/' ~ projet.slug ~ '/modifier' if projet else '/projets/creer' }}">
-  <label>Nom du projet
+  {% if parent and not projet %}<input type="hidden" name="parent" value="{{ parent.slug }}">{% endif %}
+  <label>Nom du {{ genre }}
     <input name="titre" id="titre" value="{{ projet.titre if projet else '' }}" placeholder="Maison" required autofocus></label>
-  <label>Identifiant <small class="note">minuscules, chiffres, tirets — préfixe des documents (« maison/serveur-nas »)</small>
-    <input name="{{ 'nouveau_slug' if projet else 'slug' }}" id="slug" value="{{ projet.slug if projet else '' }}"
-           placeholder="maison" pattern="[a-z0-9][a-z0-9\-]*" required></label>
+  <label>Identifiant <small class="note">minuscules, chiffres, tirets — préfixe des documents
+      (« {{ parent.slug ~ '/nas/procedures' if parent else 'maison/serveur-nas' }} »)</small>
+    <span class="champ-prefixe">{% if parent %}<code>{{ parent.slug }}/</code>{% endif %}
+    <input name="{{ 'nouveau_slug' if projet else 'slug' }}" id="slug" value="{{ projet.slug.split('/')[-1] if projet else '' }}"
+           placeholder="{{ 'nas' if parent else 'maison' }}" pattern="[a-z0-9][a-z0-9\-]*" required></span></label>
   {% if projet and projet.nb %}
-  <p class="note">Changer l'identifiant déplace les {{ projet.nb }} document(s) du projet ; leur historique est conservé.
-     Pensez à régénérer le fichier pour Claude.</p>
+  <p class="note">Changer l'identifiant déplace les {{ projet.nb }} document(s) du {{ genre }} ; leur historique est conservé.
+     {% if not parent %}Pensez à régénérer le fichier pour Claude.{% endif %}</p>
   {% endif %}
   <label>Description <small class="note">facultative</small>
     <textarea name="description" rows="3" style="min-height:0;font-family:inherit;font-size:inherit">{{ projet.description if projet else '' }}</textarea></label>
   <div class="actions">
-    <button class="primaire">{% if projet %}Enregistrer{% else %}Créer le projet{% endif %}</button>
-    <a class="lien" href="{{ '/projet/' ~ projet.slug if projet else '/' }}">Annuler</a>
+    <button class="primaire">{% if projet %}Enregistrer{% else %}Créer le {{ genre }}{% endif %}</button>
+    <a class="lien" href="{{ '/projet/' ~ projet.slug if projet else ('/projet/' ~ parent.slug if parent else '/') }}">Annuler</a>
   </div>
 </form>
 

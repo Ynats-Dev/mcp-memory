@@ -7,8 +7,11 @@ Arborescence du volume (DATA_DIR, /data par défaut) :
     /data/contexte/resume.md    documents « racine »
     /data/contexte/regles/combat.md   documents rangés par catégorie
 
-Un document est identifié par son chemin : « resume » ou « regles/combat »
-(deux niveaux maximum). Chaque fichier commence par un en-tête YAML :
+Un document est identifié par son chemin : « resume », « maison/reseau » ou, dans
+un sous-projet, « maison/nas/procedures » (trois niveaux maximum). Un projet ou un
+sous-projet est un dossier qui porte un fichier `.projet.yml` (titre, description).
+Un même nom ne peut pas désigner à la fois un document et un sous-projet.
+Chaque fichier commence par un en-tête YAML :
 
     ---
     titre: Combat
@@ -33,7 +36,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-CHEMIN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}(/[a-z0-9][a-z0-9-]{0,63})?$")
+CHEMIN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}(/[a-z0-9][a-z0-9-]{0,63}){0,2}$")
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 TZ = ZoneInfo(os.environ.get("TZ", "Europe/Paris"))
 
@@ -55,7 +58,22 @@ class Document:
 
     @property
     def categorie(self) -> str:
+        """Projet de premier niveau (« general » pour un document sans projet)."""
         return self.chemin.split("/")[0] if "/" in self.chemin else "general"
+
+    @property
+    def conteneur(self) -> str:
+        """Projet ou sous-projet qui contient directement le document (« maison/nas »)."""
+        return self.chemin.rsplit("/", 1)[0] if "/" in self.chemin else "general"
+
+    def dans(self, conteneur: str | None) -> bool:
+        """Vrai si le document appartient au projet ou sous-projet (sous-projets compris)."""
+        c = (conteneur or "").strip().strip("/").lower()
+        if not c:
+            return True
+        if c == "general":
+            return self.categorie == "general"
+        return self.chemin.startswith(c + "/")
 
 
 @dataclass
@@ -64,6 +82,8 @@ class Projet:
     titre: str
     description: str = ""
     nb: int = 0
+    parent: str = ""  # projet parent pour un sous-projet (slug « parent/nom »)
+    sous_projets: list["Projet"] = field(default_factory=list)
 
 
 @dataclass
@@ -82,6 +102,10 @@ SEGMENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 FICHIER_PROJET = ".projet.yml"
 FICHIER_ORDRE = ".ordre-projets.yml"  # ordre d'affichage des projets (liste de slugs)
 RESERVES = {"general"}  # « general » désigne les documents sans projet
+# Segments d'URL de l'interface web après /projet/<slug>/ : interdits comme noms de sous-projet.
+RESERVES_SOUS_PROJET = {"modifier", "supprimer", "importer", "export"}
+DOC_DIRECTIVES = "directives"     # consignes globales, transmises à Claude à chaque connexion
+PROJET_PROCEDURES = "procedures"  # procédures réutilisables, listées dans les instructions du serveur
 
 
 def verifier_projet(slug: str) -> str:
@@ -95,14 +119,28 @@ def verifier_projet(slug: str) -> str:
     return slug
 
 
+def verifier_conteneur(ident: str) -> str:
+    """Identifiant de projet (« maison ») ou de sous-projet (« maison/nas »)."""
+    ident = (ident or "").strip().strip("/").lower()
+    segments = ident.split("/")
+    if len(segments) > 2:
+        raise ErreurContexte(f"« {ident} » : un seul niveau de sous-projet (« projet/sous-projet »).")
+    verifier_projet(segments[0])
+    if len(segments) == 2 and not SEGMENT_RE.match(segments[1]):
+        raise ErreurContexte(
+            f"Identifiant de sous-projet invalide : {segments[1]!r}. Minuscules, chiffres et tirets."
+        )
+    return ident
+
+
 def verifier_chemin(chemin: str) -> str:
     chemin = (chemin or "").strip().strip("/").lower()
     if chemin.endswith(".md"):
         chemin = chemin[:-3]
     if not CHEMIN_RE.match(chemin):
         raise ErreurContexte(
-            f"Chemin invalide : {chemin!r}. Format attendu : « nom » ou « categorie/nom », "
-            "en minuscules, chiffres et tirets (ex. « regles/combat »)."
+            f"Chemin invalide : {chemin!r}. Format attendu : « nom », « projet/nom » ou "
+            "« projet/sous-projet/nom », en minuscules, chiffres et tirets (ex. « maison/nas/procedures »)."
         )
     return chemin
 
@@ -245,10 +283,10 @@ class Store:
             if not CHEMIN_RE.match(chemin):
                 continue
             doc = _parser(chemin, f.read_text(encoding="utf-8"))
-            if categorie and doc.categorie != categorie.strip().lower():
+            if categorie and not doc.dans(categorie):
                 continue
             docs.append(doc)
-        docs.sort(key=lambda d: (d.categorie != "general", d.categorie, d.chemin))
+        docs.sort(key=lambda d: (d.categorie != "general", d.categorie, d.chemin.count("/"), d.chemin))
         return docs
 
     def rechercher(self, requete: str, limite: int = 20) -> list[tuple[Document, list[str]]]:
@@ -326,6 +364,8 @@ class Store:
         chemin = verifier_chemin(chemin)
         with self.verrou():
             ancien = self.lire(chemin) if self.existe(chemin) else None
+            if ancien is None:
+                self._verifier_emplacement(chemin)
             if version_attendue is not None and ancien is not None:
                 if empreinte(ancien) != version_attendue:
                     raise ErreurContexte(
@@ -404,11 +444,28 @@ class Store:
                 raise ErreurContexte(f"Le document « {chemin} » n'existe pas.")
             if cible.exists():
                 raise ErreurContexte(f"Un document « {nouveau} » existe déjà.")
+            self._verifier_emplacement(nouveau)
             cible.parent.mkdir(parents=True, exist_ok=True)
             source.rename(cible)
             self._nettoyer_dossier(source.parent)
             sha = self._commit(message or f"Déplacement de {chemin} vers {nouveau}", auteur)
             return self.lire(nouveau), sha
+
+    def _verifier_emplacement(self, chemin: str) -> None:
+        """Règles de rangement d'un nouveau document : un document de sous-projet exige un
+        sous-projet déclaré, et un nom ne peut pas être à la fois document et sous-projet."""
+        if (self.docs / chemin).is_dir():
+            raise ErreurContexte(
+                f"« {chemin} » est un sous-projet : choisir un chemin « {chemin}/<nom> »."
+            )
+        segments = chemin.split("/")
+        if len(segments) == 3:
+            conteneur = "/".join(segments[:2])
+            if not (self.docs / conteneur / FICHIER_PROJET).exists():
+                raise ErreurContexte(
+                    f"Le sous-projet « {conteneur} » n'existe pas : le créer d'abord (creer_projet avec "
+                    f"parent=« {segments[0]} »), ou ranger le document dans « {segments[0]}/<nom> »."
+                )
 
     def _nettoyer_dossier(self, dossier: Path) -> None:
         """Supprime un dossier de catégorie devenu vide, sauf s'il porte un projet."""
@@ -445,9 +502,34 @@ class Store:
         projets = []
         for s in slugs:
             meta = self._meta_projet(s)
-            projets.append(Projet(s, str(meta.get("titre") or s), str(meta.get("description") or ""), compte.get(s, 0)))
+            projet = Projet(s, str(meta.get("titre") or s), str(meta.get("description") or ""), compte.get(s, 0))
+            projet.sous_projets = self._sous_projets(s)
+            projets.append(projet)
         ordre = {s: i for i, s in enumerate(self._ordre_projets())}
         return sorted(projets, key=lambda p: (ordre.get(p.slug, len(ordre)), p.titre.lower()))
+
+    def _sous_projets(self, parent: str) -> list[Projet]:
+        """Sous-projets d'un projet : ses sous-dossiers (normalement déclarés par `.projet.yml`)."""
+        d = self.docs / parent
+        if not d.is_dir():
+            return []
+        res = []
+        for x in d.iterdir():
+            if x.is_dir() and SEGMENT_RE.match(x.name):
+                slug = f"{parent}/{x.name}"
+                meta = self._meta_projet(slug)
+                nb = sum(1 for f in x.glob("*.md") if SEGMENT_RE.match(f.stem))
+                res.append(Projet(slug, str(meta.get("titre") or x.name), str(meta.get("description") or ""),
+                                  nb, parent=parent))
+        return sorted(res, key=lambda p: p.titre.lower())
+
+    def lister_conteneurs(self) -> list[Projet]:
+        """Projets et sous-projets, à plat (chaque projet suivi de ses sous-projets)."""
+        res = []
+        for p in self.lister_projets():
+            res.append(p)
+            res += p.sous_projets
+        return res
 
     def _ordre_projets(self) -> list[str]:
         try:
@@ -468,51 +550,89 @@ class Store:
             return self._commit("Réorganisation des projets", auteur)
 
     def lire_projet(self, slug: str) -> Projet:
-        slug = verifier_projet(slug)
-        for p in self.lister_projets():
+        """Projet (« maison ») ou sous-projet (« maison/nas »)."""
+        slug = verifier_conteneur(slug)
+        for p in self.lister_conteneurs():
             if p.slug == slug:
                 return p
-        raise ErreurContexte(f"Le projet « {slug} » n'existe pas.")
+        genre = "sous-projet" if "/" in slug else "projet"
+        raise ErreurContexte(f"Le {genre} « {slug} » n'existe pas.")
 
     def projet_existe(self, slug: str) -> bool:
-        return any(p.slug == slug for p in self.lister_projets())
+        return any(p.slug == slug for p in self.lister_conteneurs())
 
-    def creer_projet(self, slug: str, titre: str = "", description: str = "", auteur: str = "inconnu"):
+    def creer_projet(self, slug: str, titre: str = "", description: str = "", auteur: str = "inconnu",
+                     parent: str | None = None):
+        """Crée un projet, ou un sous-projet si `parent` est donné (un seul niveau)."""
         slug = verifier_projet(slug)
+        if parent:
+            parent = verifier_projet(parent)
         with self.verrou():
-            if self.projet_existe(slug):
-                raise ErreurContexte(f"Le projet « {slug} » existe déjà.")
-            self._ecrire_meta_projet(slug, titre or slug, description)
-            sha = self._commit(f"Création du projet {slug}", auteur)
-            return self.lire_projet(slug), sha
+            if parent:
+                self._verifier_nom_sous_projet(slug)
+                if not self.projet_existe(parent):
+                    raise ErreurContexte(f"Le projet parent « {parent} » n'existe pas.")
+                complet = f"{parent}/{slug}"
+                if self.projet_existe(complet):
+                    raise ErreurContexte(f"Le sous-projet « {complet} » existe déjà.")
+                if self._fichier(complet).exists():
+                    raise ErreurContexte(
+                        f"Un document « {complet} » existe déjà : choisir un autre nom, ou déplacer "
+                        "d'abord ce document."
+                    )
+            else:
+                complet = slug
+                if self.projet_existe(slug):
+                    raise ErreurContexte(f"Le projet « {slug} » existe déjà.")
+            self._ecrire_meta_projet(complet, titre or slug, description)
+            genre = "sous-projet" if parent else "projet"
+            sha = self._commit(f"Création du {genre} {complet}", auteur)
+            return self.lire_projet(complet), sha
 
     def modifier_projet(self, slug: str, titre: str, description: str = "",
                         nouveau_slug: str | None = None, auteur: str = "inconnu"):
-        """Modifie titre / description ; renomme l'identifiant (déplace tous ses documents)."""
-        slug = verifier_projet(slug)
-        nouveau_slug = verifier_projet(nouveau_slug) if nouveau_slug else slug
+        """Modifie titre / description ; renomme l'identifiant (déplace tous ses documents).
+        Pour un sous-projet (« maison/nas »), `nouveau_slug` est le seul nom (« stockage »)."""
+        slug = verifier_conteneur(slug)
+        parent, _, nom = slug.rpartition("/")
+        nouveau_nom = verifier_projet(nouveau_slug) if nouveau_slug else nom
+        if parent:
+            self._verifier_nom_sous_projet(nouveau_nom)
+        nouveau_slug = f"{parent}/{nouveau_nom}" if parent else nouveau_nom
+        genre = "sous-projet" if parent else "projet"
         with self.verrou():
             self.lire_projet(slug)
             if nouveau_slug != slug:
-                if self.projet_existe(nouveau_slug) or (self.docs / nouveau_slug).exists():
-                    raise ErreurContexte(f"Le projet « {nouveau_slug} » existe déjà.")
+                if (self.projet_existe(nouveau_slug) or (self.docs / nouveau_slug).exists()
+                        or self._fichier(nouveau_slug).exists()):
+                    raise ErreurContexte(f"« {nouveau_slug} » existe déjà.")
                 (self.docs / slug).rename(self.docs / nouveau_slug)
                 ordre = self._ordre_projets()
                 if slug in ordre:
                     self._ecrire_ordre([nouveau_slug if s == slug else s for s in ordre])
             self._ecrire_meta_projet(nouveau_slug, titre, description)
-            message = (f"Renommage du projet {slug} en {nouveau_slug}" if nouveau_slug != slug
-                       else f"Modification du projet {slug}")
+            message = (f"Renommage du {genre} {slug} en {nouveau_slug}" if nouveau_slug != slug
+                       else f"Modification du {genre} {slug}")
             sha = self._commit(message, auteur)
             return self.lire_projet(nouveau_slug), sha
 
+    @staticmethod
+    def _verifier_nom_sous_projet(nom: str) -> None:
+        if nom in RESERVES_SOUS_PROJET:
+            raise ErreurContexte(f"« {nom} » est réservé : choisir un autre nom de sous-projet.")
+
     def supprimer_projet(self, slug: str, auteur: str = "inconnu") -> str | None:
-        slug = verifier_projet(slug)
+        """Supprime un projet ou un sous-projet vide."""
+        slug = verifier_conteneur(slug)
         with self.verrou():
             projet = self.lire_projet(slug)
             if projet.nb:
                 raise ErreurContexte(
-                    f"Le projet « {slug} » contient {projet.nb} document(s) : les déplacer ou les supprimer d'abord."
+                    f"« {slug} » contient {projet.nb} document(s) : les déplacer ou les supprimer d'abord."
+                )
+            if projet.sous_projets:
+                raise ErreurContexte(
+                    f"Le projet « {slug} » contient des sous-projets : les supprimer d'abord."
                 )
             d = self.docs / slug
             (d / FICHIER_PROJET).unlink(missing_ok=True)
@@ -523,7 +643,8 @@ class Store:
                 d.rmdir()
             except OSError:
                 pass
-            return self._commit(f"Suppression du projet {slug}", auteur)
+            genre = "sous-projet" if "/" in slug else "projet"
+            return self._commit(f"Suppression du {genre} {slug}", auteur)
 
     def restaurer(self, chemin: str, sha: str, auteur: str = "inconnu"):
         ancien = self.lire_version(chemin, sha)

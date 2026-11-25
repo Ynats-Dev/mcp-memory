@@ -12,7 +12,7 @@ SEUIL_LONG_SANS_STRUCTURE = 6000   # tokens
 SEUIL_SECTION = 3000               # tokens de texte propre (hors sous-sections)
 SEUIL_RESUME = 1200
 DATE_TITRE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b|\b20\d\d-\d\d-\d\d\b")
-RENVOI = re.compile(r"`([a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*)`")
+RENVOI = re.compile(r"`([a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*){1,2})`")
 
 
 @dataclass
@@ -37,6 +37,12 @@ class InfoProjet:
     titre: str
     docs: list[InfoDoc] = field(default_factory=list)
     alertes: list[Alerte] = field(default_factory=list)
+    sous_projets: int = 0  # lignes « 📁 » dans l'index du projet
+
+    @property
+    def directs(self) -> list[InfoDoc]:
+        """Documents rangés directement dans ce projet (hors sous-projets)."""
+        return [d for d in self.docs if d.doc.conteneur == self.slug]
 
     @property
     def actifs(self):
@@ -56,10 +62,11 @@ class InfoProjet:
 
     @property
     def demarrage(self) -> int:
-        """Tokens renvoyés par vue_ensemble(projet) : fiche résumé + une ligne d'index par document."""
-        lignes = sum(sec.tokens(f"- `{d.doc.chemin}` — {d.doc.titre} (~1.2k tokens)") for d in self.docs
+        """Tokens renvoyés par vue_ensemble(projet) : fiche résumé + une ligne d'index par document
+        direct + une ligne par sous-projet (leurs documents ne sont pas listés)."""
+        lignes = sum(sec.tokens(f"- `{d.doc.chemin}` — {d.doc.titre} (~1.2k tokens)") for d in self.directs
                      if d is not self.resume)
-        return (self.resume.tokens if self.resume else 25) + lignes + 30
+        return (self.resume.tokens if self.resume else 25) + lignes + 20 * self.sous_projets + 30
 
     @property
     def maj(self) -> str:
@@ -104,8 +111,10 @@ def _alertes(info: InfoDoc, existants: set[str]) -> list[Alerte]:
 
 def analyser(store: Store) -> list[InfoProjet]:
     docs = store.lister()
-    existants = {d.chemin for d in docs}
-    projets = {p.slug: InfoProjet(p.slug, p.titre) for p in store.lister_projets()}
+    # un renvoi vers un sous-projet (`maison/nas`) n'est pas un document absent
+    existants = {d.chemin for d in docs} | {p.slug for p in store.lister_conteneurs()}
+    liste = store.lister_projets()
+    projets = {p.slug: InfoProjet(p.slug, p.titre, sous_projets=len(p.sous_projets)) for p in liste}
     for d in docs:
         p = projets.setdefault(d.categorie, InfoProjet(d.categorie, "Sans projet" if d.categorie == "general"
                                                       else d.categorie))
@@ -117,8 +126,20 @@ def analyser(store: Store) -> list[InfoProjet]:
             p.alertes.insert(0, Alerte("important", f"{p.slug}/resume",
                                        "pas de fiche résumé : vue_ensemble n'a rien à afficher en tête"))
         p.docs.sort(key=lambda i: -i.tokens)
+    for projet in liste:
+        for s in projet.sous_projets:
+            if s.nb and f"{s.slug}/resume" not in existants:
+                projets[projet.slug].alertes.append(Alerte("conseil", f"{s.slug}/resume",
+                                                           "sous-projet sans fiche résumé"))
     return sorted(projets.values(), key=lambda p: (p.slug == "general", p.titre.lower()))
 
 
 def analyser_projet(store: Store, slug: str) -> InfoProjet | None:
-    return next((p for p in analyser(store) if p.slug == slug), None)
+    """Projet (« maison ») ou sous-projet (« maison/nas ») : documents, alertes, coût de démarrage."""
+    parent = next((p for p in analyser(store) if p.slug == slug.split("/")[0]), None)
+    if parent is None or "/" not in slug:
+        return parent
+    sous = store.lire_projet(slug)
+    docs = [d for d in parent.docs if d.doc.dans(slug)]
+    alertes = [a for a in parent.alertes if a.chemin.startswith(slug + "/")]
+    return InfoProjet(slug, sous.titre, docs, alertes)

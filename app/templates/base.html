@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <title>{% block titre %}MCP Memory{% endblock %}</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c1e'/%3E%3Cpath d='M9 11l7-4 7 4v10l-7 4-7-4z' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/style.css?v=21">
+<link rel="stylesheet" href="/static/style.css?v=22">
 </head>
 {% set ici = request.url.path %}
 <body>
@@ -33,9 +33,17 @@
         <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></a></div>
     <nav class="menu cats" id="nav-projets">
       {% for p in nav.projets %}
-      <a href="/projet/{{ p.slug }}" draggable="true" data-slug="{{ p.slug }}" title="{{ p.titre }} — glisser pour réordonner" class="projet-nav {{ 'actif' if ici == '/projet/' ~ p.slug or ici.startswith('/projet/' ~ p.slug ~ '/') or ici.startswith('/doc/' ~ p.slug ~ '/') or ici.startswith('/editer/' ~ p.slug ~ '/') }}">
-        <span class="pastille-projet" aria-hidden="true">{{ p.titre[:1]|upper }}</span>
-        <span class="lib-projet">{{ p.titre }}</span><span class="compte">{{ p.nb }}</span></a>
+      {% set dans_projet = ici == '/projet/' ~ p.slug or ici.startswith('/projet/' ~ p.slug ~ '/') or ici.startswith('/doc/' ~ p.slug ~ '/') or ici.startswith('/editer/' ~ p.slug ~ '/') %}
+      {% set dans_sous = p.sous_projets|selectattr('slug', 'in', [ici[8:], ici[5:].rpartition('/')[0], ici[8:].rpartition('/')[0]])|list %}
+      <div class="groupe-projet" data-slug="{{ p.slug }}">
+        <a href="/projet/{{ p.slug }}" draggable="true" title="{{ p.titre }} — glisser pour réordonner" class="projet-nav {{ 'actif' if dans_projet and not dans_sous }} {{ 'parent-actif' if dans_sous }}">
+          <span class="pastille-projet" aria-hidden="true">{{ p.titre[:1]|upper }}</span>
+          <span class="lib-projet">{{ p.titre }}</span><span class="compte">{{ p.nb }}</span></a>
+        {% for sp in p.sous_projets %}
+        <a href="/projet/{{ sp.slug }}" class="sous-nav {{ 'actif' if sp in dans_sous }}" title="{{ sp.titre }}{{ ' — ' ~ sp.description if sp.description }}">
+          <span class="lib-projet">{{ sp.titre }}</span><span class="compte">{{ sp.nb }}</span></a>
+        {% endfor %}
+      </div>
       {% else %}
       <a href="/projets/nouveau" class="vide-nav">Créer un premier projet</a>
       {% endfor %}
@@ -47,6 +55,8 @@
 
     <div class="menu-titre menu-titre-outils">Outils</div>
     <nav class="menu outils">
+      <a href="/doc/directives" class="{{ 'actif' if ici == '/doc/directives' or ici == '/editer/directives' }}" title="Consignes transmises à Claude à chaque connexion">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span class="lib">Directives</span></a>
       <a href="/memoire" class="{{ 'actif' if ici == '/memoire' }}">
         <svg viewBox="0 0 24 24" class="ic"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><span class="lib">Mémoire</span></a>
       <a href="/historique" class="{{ 'actif' if ici == '/historique' or ici.startswith('/commit/') }}">
@@ -81,10 +91,10 @@
   if (!nav) return;
   var tire = null, avant = "";
   function ordre() {
-    return Array.prototype.map.call(nav.querySelectorAll("a[data-slug]"), function (a) { return a.dataset.slug; });
+    return Array.prototype.map.call(nav.querySelectorAll(".groupe-projet[data-slug]"), function (g) { return g.dataset.slug; });
   }
   nav.addEventListener("dragstart", function (e) {
-    tire = e.target.closest && e.target.closest("a[data-slug]");
+    tire = e.target.closest && e.target.closest(".groupe-projet[data-slug]");
     if (!tire) return;
     avant = ordre().join(",");
     e.dataTransfer.effectAllowed = "move";
@@ -95,7 +105,7 @@
     if (!tire) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    var cible = e.target.closest && e.target.closest("a[data-slug]");
+    var cible = e.target.closest && e.target.closest(".groupe-projet[data-slug]");
     if (!cible || cible === tire) return;
     var r = cible.getBoundingClientRect();
     nav.insertBefore(tire, e.clientY > r.top + r.height / 2 ? cible.nextSibling : cible);

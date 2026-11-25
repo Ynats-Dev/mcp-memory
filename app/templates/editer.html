@@ -24,10 +24,12 @@
     <label>Projet <small>dossier du document</small>
       <select name="projet">
         <option value="">— Sans projet —</option>
-        {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if p.slug == projet }}>{{ p.titre }}</option>{% endfor %}
+        {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if p.slug == projet }}>{{ p.titre }}</option>
+          {% for sp in p.sous_projets %}<option value="{{ sp.slug }}" {{ 'selected' if sp.slug == projet }}>&nbsp;&nbsp;↳ {{ sp.titre }}</option>{% endfor %}
+        {% endfor %}
       </select></label>
     <label>Nom <small>minuscules, chiffres, tirets</small>
-      <input name="nom" required pattern="[a-z0-9][a-z0-9\-]*" placeholder="serveur-nas" autofocus></label>
+      <input name="nom" value="{{ nom_doc|default('') }}" required pattern="[a-z0-9][a-z0-9\-]*" placeholder="serveur-nas" autofocus></label>
     {% endif %}
     <label>Titre <small>par défaut : premier « # »</small>
       <input name="titre" value="{{ doc.titre if doc else '' }}"></label>

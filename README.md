@@ -16,7 +16,7 @@ par vos propres valeurs.
 
 ## Fonctionnement
 
-- Chaque document est un fichier Markdown (`resume`, `decisions`, `regles/combat`…)
+- Chaque document est un fichier Markdown (`resume`, `maison/reseau`, `maison/nas/procedures`…)
   stocké dans le volume Docker `mcp-memory_contexte-data`.
 - Ce volume est un dépôt **Git** : chaque modification (LLM ou web) crée un commit
   avec son auteur. L'historique, les différences et la restauration d'une version
@@ -30,14 +30,63 @@ Un **projet** regroupe les documents d'un même sujet : son identifiant sert de 
 (`maison/serveur-nas`) et de périmètre au fichier de projet pour Claude. Il est décrit
 par `contexte/<projet>/.projet.yml` (titre, description) et existe même vide.
 Interface web : créer, modifier, renommer (déplace tous ses documents), supprimer (s'il est
-vide) ; sur un document, **Déplacer** le range dans un autre projet. L'historique suit le
-document lors des déplacements.
+vide), réordonner par glisser-déposer dans la barre latérale ; sur un document, **Déplacer**
+le range dans un autre projet ou sous-projet. L'historique suit le document lors des
+déplacements.
+
+### Sous-projets
+
+Quand un projet grossit (un document par machine, avec son journal…), des **sous-projets**
+le découpent, sur un seul niveau : `maison/nas`, décrit par `contexte/maison/nas/.projet.yml`.
+
+- Leurs documents ont pour chemin `maison/nas/<nom>` ; chacun peut avoir sa fiche
+  `maison/nas/resume`.
+- Dans l'index d'un projet, un sous-projet n'occupe qu'**une ligne** (titre, description,
+  nombre de documents) : `vue_ensemble(projet="maison")` reste court, et
+  `vue_ensemble(projet="maison/nas")` ne charge que la fiche et les documents du NAS.
+- `rechercher(projet="maison")` inclut les sous-projets ; `projet="maison/nas"` se limite au NAS.
+- Un document de sous-projet exige un sous-projet déclaré (pas de création implicite), et un
+  même nom ne peut pas désigner à la fois un document et un sous-projet.
+- Interface web : **Plus › Nouveau sous-projet** sur la page d'un projet. La barre latérale
+  affiche les sous-projets sous leur projet ; la page d'un projet les présente en cartes
+  (documents, coût de démarrage, fiche résumé manquante). Renommer, supprimer (s'il est
+  vide), importer et exporter fonctionnent comme pour un projet.
+- Noms réservés (segments d'adresse de l'interface) : `modifier`, `supprimer`, `importer`, `export`.
+
+Claude peut aussi créer un projet ou un sous-projet avec l'outil `creer_projet` (voir
+*Outils MCP*) : il le propose d'abord, puis attend votre accord.
+
+### Directives globales
+
+Le document `directives` (à la racine, sans projet) rassemble les consignes valables dans
+**toutes** les conversations : langue de réponse, règles Git (« jamais de push sans accord »,
+« commits sous mon nom »), réflexes à avoir… Le serveur l'ajoute à ses instructions MCP à
+chaque connexion : tous les clients (Claude Code, Claude Desktop, claude.ai, VS Code) le
+reçoivent sans appel d'outil, et une modification s'applique à la session suivante.
+
+- Accès : **Directives** dans la barre latérale (l'accueil propose de le créer s'il manque).
+- Restez bref : il est chargé dans chaque conversation. Au-delà d'environ 2 000 tokens, seul
+  un renvoi vers le document est transmis.
+- Ce sont des consignes, pas des verrous : pour **imposer** une règle dans Claude Code, voir
+  *Consignes recommandées pour Claude* (hooks et réglages).
+
+### Procédures
+
+Le projet `procedures` contient des procédures réutilisables (« Diagnostic DNS maison »,
+« Publier une release »…). Le **titre** de chaque document est listé dans les instructions du
+serveur ; Claude lit la procédure (`lire_document`) avant d'effectuer la tâche qu'elle couvre.
+Créez le projet `procedures` comme n'importe quel projet, et donnez des titres explicites :
+c'est sur eux que Claude décide d'ouvrir une procédure.
 
 ### Outils MCP
 `vue_ensemble` (à appeler en premier), `lister_projets`, `lister_documents`, `plan_document`,
 `lire_document`, `rechercher`, `ecrire_document`, `ajouter_au_document`, `remplacer_texte`,
-`deplacer_document`, `enregistrer_decision`, `historique`.
-Création de projet, suppression et restauration d'une version : interface web.
+`deplacer_document`, `enregistrer_decision`, `creer_projet`, `historique`.
+`creer_projet` crée un projet, ou un sous-projet avec `parent`. Les consignes demandent à
+Claude de le proposer (identifiant, titre, documents à y déplacer) et de n'appeler l'outil
+qu'après votre accord. Dans Claude Code, ne l'ajoutez pas aux outils autorisés d'office : la
+demande de permission sert alors de confirmation. Renommage et suppression de projet,
+restauration d'une version : interface web.
 
 **Économie de tokens.** Les documents longs ne sont pas renvoyés en entier :
 - l'index (`vue_ensemble`, filtrable par `projet`) affiche la taille estimée de chaque document ;
@@ -49,13 +98,16 @@ Création de projet, suppression et restauration d'une version : interface web.
 - `ajouter_au_document(…, section=…)` insère à la fin d'une section sans relire le document.
 - chaque projet a une fiche `<projet>/resume` (~500 tokens, tenue à jour par Claude), affichée
   en tête de `vue_ensemble(projet=…)` ;
+- un sous-projet n'occupe qu'une ligne dans l'index de son projet : son contenu n'est chargé
+  qu'avec `vue_ensemble(projet="projet/sous-projet")` ;
 - les consignes demandent de corriger l'information à sa place plutôt que d'empiler des
   sections datées (l'historique Git conserve l'ancien état) ;
 - un document portant le tag `archive` (journal d'une mise en place, état ancien) est signalé
   dans l'index et exclu de `rechercher`, sauf avec `archives=true` ;
 - descriptions d'outils courtes, sans sortie structurée en double (≈ 1 200 tokens pour l'ensemble).
 
-Ressources : `contexte://index`, `contexte://doc/{nom}`, `contexte://doc/{categorie}/{nom}`.
+Ressources : `contexte://index`, `contexte://doc/{nom}`, `contexte://doc/{categorie}/{nom}`,
+`contexte://doc/{categorie}/{sous_projet}/{nom}`.
 Prompt : `charger_contexte`.
 
 ## Installation
@@ -110,10 +162,10 @@ cd /opt/mcp-memory && docker compose exec web python -m app.compte reinitialiser
 
 ## Page Mémoire (indicateurs)
 
-- **Par projet** : coût de démarrage d'une conversation (fiche résumé + index), volume des documents actifs et des archives, fiche résumé, dernière modification.
-- **Santé** : fiche résumé absente ou trop longue, document long sans titres, section de plus de ~3k tokens, dérive en journal (« 🆕 », titres datés, tâches cochées), renvois vers des documents absents. Dans les documents, un chemin `projet/document` cité devient un lien (barré s'il n'existe pas).
+- **Par projet** : coût de démarrage d'une conversation (fiche résumé + index ; un sous-projet y compte pour une ligne), volume des documents actifs et des archives (sous-projets compris), fiche résumé, dernière modification.
+- **Santé** : fiche résumé absente ou trop longue (projet ou sous-projet), document long sans titres, section de plus de ~3k tokens, dérive en journal (« 🆕 », titres datés, tâches cochées), renvois vers des documents absents. Dans les documents, un chemin `projet/document` ou `projet/sous-projet/document` cité devient un lien (barré s'il n'existe pas) ; un sous-projet cité (`projet/sous-projet`) mène à sa page.
 - **Usage par Claude** : chaque appel d'outil MCP est journalisé dans `<DATA_DIR>/.usage/AAAA-MM.jsonl` (outil, chemin, section, requête, taille de la réponse, durée ; jamais de contenu ; 12 mois). La page montre les tokens servis par jour et par projet, les documents les plus lus, ceux lus en entier, les recherches sans résultat et les écritures par auteur.
-- **Sauvegarde** et **export** `.zip` (tout, ou un projet depuis sa page).
+- **Sauvegarde** et **export** `.zip` (tout, ou un projet ou sous-projet depuis sa page).
 
 **Garde-fou contre les secrets** : toute écriture (MCP, interface, import) contenant une clé privée, un jeton (JWT, GitHub, AWS, `sk-…`, Bearer), un mot de passe dans une adresse de connexion ou une affectation `…PASSWORD=`, `…TOKEN=`, `…SECRET=` avec une vraie valeur est refusée. Les valeurs modèles (`<secret>`, `***`, `${…}`, chemins) passent ; un secret déjà présent ne bloque pas les modifications suivantes. Dans l'interface, une case permet d'enregistrer quand même (faux positif).
 
@@ -210,7 +262,8 @@ réseau local ; sur le web ou le mobile, Claude signalera que les outils sont in
 
 1. Importer les fichiers du projet dans le serveur (voir *Import* ci-dessous), par exemple
    dans le projet `maison`.
-2. Interface web → **Claude** : nom du projet + catégorie → *Télécharger* le fichier
+2. Interface web → **Claude** (ou **Fichier pour Claude** sur la page d'un projet ; pas
+   sur un sous-projet) : nom du projet + catégorie → *Télécharger* le fichier
    `mcp-memory-<categorie>.md`. Il indique à Claude le connecteur à utiliser, les documents
    du projet, et lui demande de tenir le contexte à jour sans qu'on le lui demande (case à
    décocher pour qu'il propose les modifications au lieu de les appliquer).
@@ -220,8 +273,8 @@ réseau local ; sur le web ou le mobile, Claude signalera que les outils sont in
 
 ### Import de fichiers existants
 
-**Depuis l'interface** : glisser plusieurs fichiers `.md` sur la page d'un projet (ou cliquer
-sur la zone de dépôt). Mêmes règles de nommage que le script ; les documents existants sont
+**Depuis l'interface** : glisser plusieurs fichiers `.md` sur la page d'un projet ou d'un
+sous-projet (ou cliquer sur la zone de dépôt). Mêmes règles de nommage que le script ; les documents existants sont
 ignorés, sauf si « Remplacer les documents existants » est coché.
 
 **En ligne de commande** : copier les fichiers téléchargés depuis claude.ai dans `import/`
@@ -239,7 +292,9 @@ est retiré). Si deux fichiers donnent le même document, l'import s'arrête : n
 ## Consignes recommandées pour Claude
 
 Le serveur envoie déjà ses propres consignes aux clients MCP (lire peu, mettre à jour à la
-bonne place). Elles ne garantissent pas que Claude **pense** à consulter le serveur : face à
+bonne place), suivies de vos *Directives globales*. Les règles générales (langue, Git…) ont
+leur place dans le document `directives` : elles valent alors pour tous les clients. Ces
+consignes ne garantissent pas pour autant que Claude **pense** à consulter le serveur : face à
 une question courte (« tel site ne répond plus »), il a tendance à répondre avec des
 hypothèses génériques sans lire votre documentation. Pour l'éviter, ajoutez une consigne
 explicite à vos instructions personnelles :
@@ -277,6 +332,30 @@ Après résolution d'un incident : proposer d'ajouter la cause et le correctif
 Le nom `mcp__mcp-memory__…` suppose que le serveur est enregistré sous le nom `mcp-memory` ;
 adaptez-le si vous l'avez nommé autrement. Gardez la liste « Faits à ne pas redécouvrir »
 courte : les détails ont leur place dans les documents du serveur, qui restent la source de vérité.
+
+### Imposer une règle dans Claude Code (réglages et hooks)
+
+Une directive reste une consigne : Claude peut l'oublier. Dans Claude Code, les règles
+critiques s'imposent par les réglages (`~/.claude/settings.json`, à fusionner avec l'existant) :
+
+```json
+{
+  "language": "french",
+  "attribution": { "commit": "", "pr": "", "sessionUrl": false },
+  "permissions": { "ask": ["Bash(git push *)", "Bash(git push)"] }
+}
+```
+
+- `language` : langue des réponses ;
+- `attribution` vide : Claude Code n'ajoute plus « Co-Authored-By: Claude » ni « Generated
+  with Claude Code » aux commits et aux PR ;
+- `permissions.ask` : tout `git push` demande confirmation, même s'il figure ailleurs dans
+  la liste `allow` (retirez-l'en au passage).
+
+Pour aller plus loin, un **hook** `PreToolUse` sur `Bash` peut refuser une commande avant
+son exécution, par exemple un commit dont le message contient une signature Claude
+(réponse `permissionDecision: "deny"`) ou un `git push` (réponse `"ask"`). Ces mécanismes
+ne concernent que Claude Code : pour les autres clients, seules les directives s'appliquent.
 
 ## Sauvegarde et restauration
 

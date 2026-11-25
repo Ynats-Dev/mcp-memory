@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block titre %}{{ projet.titre }} — MCP Memory{% endblock %}
 {% block contenu %}
-<nav class="fil-ariane"><a href="/">Accueil</a><span>/</span><span>{{ projet.titre }}</span></nav>
+<nav class="fil-ariane"><a href="/">Accueil</a><span>/</span>{% if parent %}<a href="/projet/{{ parent.slug }}">{{ parent.titre }}</a><span>/</span>{% endif %}<span>{{ projet.titre }}</span></nav>
 {% if msg %}<p class="info">{{ msg }}</p>{% endif %}
 
 <header class="page-tete">
   <div class="tete-projet">
     <span class="pastille-projet grande" aria-hidden="true">{{ projet.titre[:1]|upper }}</span>
     <div>
-      <h1>{{ projet.titre }}</h1>
+      <h1>{{ projet.titre }}{% if parent %} <span class="tag">sous-projet</span>{% endif %}</h1>
       {% if projet.description %}<p class="sous">{{ projet.description }}</p>{% endif %}
       {% if info and info.docs %}
       <div class="metriques">
@@ -20,6 +20,7 @@
     </div>
   </div>
   <div class="actions">
+    {% if not parent %}
     <details class="deroulant">
       <summary class="bouton">
         <svg viewBox="0 0 24 24" class="ic"><path d="M9 7.5 4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5"/></svg>Fichier pour Claude</summary>
@@ -36,6 +37,7 @@
         </div>
       </form>
     </details>
+    {% endif %}
     <details class="deroulant menu-plus">
       <summary class="bouton" aria-label="Plus d'actions">
         <svg viewBox="0 0 24 24" class="ic"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg>Plus</summary>
@@ -45,10 +47,14 @@
         <label class="case action-case"><input type="checkbox" id="depot-remplacer"> remplacer les documents existants</label>
         {% if projet.nb %}<a class="action" href="/projet/{{ projet.slug }}/export"><svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Exporter en .zip
           <small>tous les documents, archives comprises</small></a>{% endif %}
-        <a class="action" href="/projet/{{ projet.slug }}/modifier"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Renommer, décrire le projet</a>
-        {% if not projet.nb %}
-        <form method="post" action="/projet/{{ projet.slug }}/supprimer" onsubmit="return confirm('Supprimer ce projet vide ?')">
-          <button class="action danger"><svg viewBox="0 0 24 24" class="ic"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Supprimer le projet</button></form>
+        {% if not parent %}
+        <a class="action" href="/projets/nouveau?parent={{ projet.slug }}"><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>Nouveau sous-projet
+          <small>pour isoler un sujet : Claude ne charge que lui</small></a>
+        {% endif %}
+        <a class="action" href="/projet/{{ projet.slug }}/modifier"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Renommer, décrire le {{ 'sous-projet' if parent else 'projet' }}</a>
+        {% if not projet.nb and not projet.sous_projets %}
+        <form method="post" action="/projet/{{ projet.slug }}/supprimer" onsubmit="return confirm('Supprimer ce {{ 'sous-projet' if parent else 'projet' }} vide ?')">
+          <button class="action danger"><svg viewBox="0 0 24 24" class="ic"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Supprimer le {{ 'sous-projet' if parent else 'projet' }}</button></form>
         {% endif %}
       </div>
     </details>
@@ -69,10 +75,19 @@
   </div>
 </form>
 
+{% if procedures %}
+<div class="bandeau-directives">
+  <svg viewBox="0 0 24 24" class="ic"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+  <span><strong>Procédures.</strong> Le titre de chaque document de ce projet est transmis à Claude à chaque connexion ;
+    Claude lit la procédure avant d'effectuer la tâche qu'elle couvre. Donnez des titres explicites
+    (« Diagnostic DNS maison », « Publier une release »).</span>
+</div>
+{% endif %}
+
 {% macro ligne_doc(i) %}
   <a class="ligne ligne-doc-projet" href="/doc/{{ i.doc.chemin }}">
     <span class="ligne-titre">{{ i.doc.titre }}
-      {% for t in i.doc.tags if t not in (projet.slug, 'archive') %}<span class="tag">{{ t }}</span>{% endfor %}</span>
+      {% for t in i.doc.tags if t not in projet.slug.split('/') and t != 'archive' %}<span class="tag">{{ t }}</span>{% endfor %}</span>
     <span class="ligne-meta">
       <span title="Sections lisibles séparément">{{ i.sections }} section{{ 's' if i.sections > 1 }}</span>
       <span class="ligne-taille">{{ i.tokens|tokens }}</span>
@@ -96,6 +111,23 @@
   <a href="/nouveau?projet={{ projet.slug }}">Créer <code>{{ projet.slug }}/resume</code></a></span></p>
 {% endif %}
 
+{% if projet.sous_projets %}
+<section class="bloc">
+  <div class="titre-bloc"><h2>Sous-projets <span class="n">{{ projet.sous_projets|length }}</span></h2>
+    <a class="lien petit" href="/projets/nouveau?parent={{ projet.slug }}">+ Sous-projet</a></div>
+  <div class="grille-sous-projets">
+  {% for sp in projet.sous_projets %}
+    {% set si = infos_sous.get(sp.slug) %}
+    <a class="carte-sous-projet" href="/projet/{{ sp.slug }}">
+      <strong><svg viewBox="0 0 24 24" class="ic"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>{{ sp.titre }}</strong>
+      {% if sp.description %}<span>{{ sp.description }}</span>{% endif %}
+      <span class="note">{{ sp.nb }} document{{ 's' if sp.nb > 1 }}{% if si and si.docs %} · démarrage {{ si.demarrage|tokens }}{% endif %}{% if si and sp.nb and not si.resume %} · sans fiche résumé{% endif %}</span>
+    </a>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if actifs %}
 <section class="bloc">
   <div class="titre-bloc"><h2>Documents <span class="n">{{ actifs|length }}</span></h2></div>
@@ -111,7 +143,7 @@
 </details>
 {% endif %}
 
-{% if not docs %}
+{% if not docs and not projet.sous_projets %}
 <div class="vide">
   <span class="icone"><svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></span>
   <h2>Projet vide</h2>

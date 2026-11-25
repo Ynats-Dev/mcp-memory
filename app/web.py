@@ -24,7 +24,8 @@ from . import fichier_projet, indicateurs, maj, sauvegarde, usage
 from .sections import taille as taille_tokens
 from .compte import COOKIE, Comptes, ErreurCompte
 from .importer import nom_document
-from .store import Document, ErreurContexte, ErreurSecret, Store, empreinte, plier, verifier_chemin, verifier_projet
+from .store import (DOC_DIRECTIVES, PROJET_PROCEDURES, Document, ErreurContexte, ErreurSecret, Store, empreinte,
+                    plier, verifier_chemin, verifier_conteneur)
 
 ICI = Path(__file__).parent
 store = Store()
@@ -82,15 +83,18 @@ templates.env.globals["navigation"] = navigation
 templates.env.globals["maj_disponible"] = maj.disponible
 templates.env.filters["tokens"] = taille_tokens
 
-RENVOI_HTML = re.compile(r"<code>([a-z0-9][a-z0-9-]{0,63}/[a-z0-9][a-z0-9-]{0,63})</code>")
+RENVOI_HTML = re.compile(r"<code>([a-z0-9][a-z0-9-]{0,63}(?:/[a-z0-9][a-z0-9-]{0,63}){1,2})</code>")
 
 
 def liens_documents(html: str) -> str:
-    """`projet/document` cité dans un texte → lien vers le document s'il existe, marqué s'il est absent."""
+    """`projet/document` cité dans un texte → lien vers le document (ou le sous-projet) s'il existe,
+    marqué s'il est absent."""
     def remplacer(m):
         chemin = m.group(1)
         if store.existe(chemin):
             return f'<a class="renvoi" href="/doc/{chemin}"><code>{chemin}</code></a>'
+        if chemin.count("/") == 1 and store.projet_existe(chemin):
+            return f'<a class="renvoi" href="/projet/{chemin}"><code>{chemin}</code></a>'
         projet = chemin.split("/")[0]
         if store.projet_existe(projet):
             return f'<code class="renvoi-casse" title="Document absent">{chemin}</code>'
@@ -312,7 +316,7 @@ def exporter_tout(user: str = Depends(utilisateur)):
     return _zip([store.docs], "mcp-memory")
 
 
-@app.get("/projet/{slug}/export")
+@app.get("/projet/{slug:path}/export")
 def exporter_projet(slug: str, user: str = Depends(utilisateur)):
     projet = store.lire_projet(slug)
     return _zip([store.docs / projet.slug], f"mcp-memory-{projet.slug}")
@@ -385,9 +389,10 @@ def accueil(request: Request, q: str = "", archives: bool = False, msg: str = ""
     infos = {i.slug: i for i in indicateurs.analyser(store)}
     docs = store.lister()
     recents = sorted((d for d in docs if "archive" not in d.tags), key=lambda d: d.maj, reverse=True)[:8]
+    directives = next((d for d in docs if d.chemin == DOC_DIRECTIVES), None)
     return rendu(request, "index.html", projets=projets, infos=infos, total=len(docs), msg=msg,
-                 recents=recents, titres=titres, activite=store.historique(limite=6),
-                 sans_projet=[d for d in docs if d.categorie == "general"])
+                 recents=recents, titres=titres, activite=store.historique(limite=6), directives=directives,
+                 sans_projet=[d for d in docs if d.categorie == "general" and d.chemin != DOC_DIRECTIVES])
 
 
 @app.get("/doc/{chemin:path}", response_class=HTMLResponse)
@@ -395,18 +400,20 @@ def voir(request: Request, chemin: str, version: str = "", msg: str = "", user: 
     doc = store.lire_version(chemin, version) if version else store.lire(chemin)
     projets = store.lister_projets()
     projet = next((p for p in projets if p.slug == doc.categorie), None)
+    sous_projet = next((s for s in projet.sous_projets if s.slug == doc.conteneur), None) if projet else None
     texte = sans_titre(doc.contenu, doc.titre)
     lignes = texte.splitlines()
     sommaire = [(n, s.niveau, re.sub(r"[`*_]", "", s.titre), indicateurs.sec.tokens("\n".join(lignes[s.debut:s.fin])))
                 for n, s in enumerate((s for s in indicateurs.sec.decouper(texte) if s.niveau), 1)]
     return rendu(request, "document.html", doc=doc, version=version, msg=msg, projets=projets,
-                 projet=projet, revisions=store.historique(doc.chemin, 50), sommaire=sommaire,
-                 taille=indicateurs.sec.tokens(doc.contenu))
+                 projet=projet, sous_projet=sous_projet, revisions=store.historique(doc.chemin, 50),
+                 sommaire=sommaire, taille=indicateurs.sec.tokens(doc.contenu),
+                 directives=doc.chemin == DOC_DIRECTIVES, procedure=doc.conteneur == PROJET_PROCEDURES)
 
 
 @app.get("/nouveau", response_class=HTMLResponse)
-def nouveau(request: Request, projet: str = "", user: str = Depends(utilisateur)):
-    return rendu(request, "editer.html", doc=None, base="", projets=store.lister_projets(), projet=projet)
+def nouveau(request: Request, projet: str = "", nom: str = "", user: str = Depends(utilisateur)):
+    return rendu(request, "editer.html", doc=None, base="", projets=store.lister_projets(), projet=projet, nom_doc=nom)
 
 
 @app.get("/editer/{chemin:path}", response_class=HTMLResponse)
@@ -430,7 +437,7 @@ def enregistrer(
     user: str = Depends(utilisateur),
 ):
     if not chemin:  # création : projet + nom
-        chemin = f"{verifier_projet(projet)}/{nom}" if projet else nom
+        chemin = f"{verifier_conteneur(projet)}/{nom}" if projet else nom
     chemin = verifier_chemin(chemin)
     if not base and store.existe(chemin):
         raise ErreurContexte(f"Le document « {chemin} » existe déjà : ouvrez-le pour le modifier.")
@@ -461,22 +468,26 @@ def restaurer(chemin: str, version: str = Form(...), user: str = Depends(utilisa
 
 @app.post("/deplacer/{chemin:path}", dependencies=[Depends(meme_origine)])
 def deplacer(chemin: str, projet: str = Form(""), nom: str = Form(...), user: str = Depends(utilisateur)):
-    nouveau = f"{verifier_projet(projet)}/{nom}" if projet else nom
+    nouveau = f"{verifier_conteneur(projet)}/{nom}" if projet else nom
     doc, sha = store.deplacer(chemin, nouveau, auteur=f"web:{user}")
     return vers_doc(doc.chemin, msg=f"Déplacé depuis « {chemin} » ({sha})")
 
 
 # ------------------------------------------------------------------ projets
 @app.get("/projets/nouveau", response_class=HTMLResponse)
-def nouveau_projet(request: Request, user: str = Depends(utilisateur)):
-    return rendu(request, "projet_form.html", projet=None)
+def nouveau_projet(request: Request, parent: str = "", user: str = Depends(utilisateur)):
+    parent_p = store.lire_projet(parent) if parent else None
+    if parent_p and parent_p.parent:
+        raise ErreurContexte("Un sous-projet ne peut pas contenir de sous-projet.")
+    return rendu(request, "projet_form.html", projet=None, parent=parent_p)
 
 
 @app.post("/projets/creer", dependencies=[Depends(meme_origine)])
 def creer_projet(slug: str = Form(...), titre: str = Form(""), description: str = Form(""),
-                 user: str = Depends(utilisateur)):
-    p, _ = store.creer_projet(slug, titre, description, auteur=f"web:{user}")
-    return RedirectResponse(f"/projet/{p.slug}?msg={quote('Projet créé')}", status_code=303)
+                 parent: str = Form(""), user: str = Depends(utilisateur)):
+    p, _ = store.creer_projet(slug, titre, description, auteur=f"web:{user}", parent=parent or None)
+    msg = "Sous-projet créé" if p.parent else "Projet créé"
+    return RedirectResponse(f"/projet/{p.slug}?msg={quote(msg)}", status_code=303)
 
 
 @app.post("/projets/ordre", dependencies=[Depends(meme_origine)])
@@ -492,21 +503,10 @@ async def ordonner_projets(request: Request, user: str = Depends(utilisateur)):
     return {"ok": True}
 
 
-@app.get("/projet/{slug}", response_class=HTMLResponse)
-def voir_projet(request: Request, slug: str, msg: str = "", user: str = Depends(utilisateur)):
-    projet = store.lire_projet(slug)
-    info = indicateurs.analyser_projet(store, projet.slug)
-    lignes = sorted(info.docs if info else [], key=lambda i: i.doc.titre.lower())
-    resume = info.resume if info else None
-    return rendu(request, "projet.html", projet=projet, docs=store.lister(projet.slug), msg=msg, info=info,
-                 resume=resume, actifs=[i for i in lignes if not i.archive and i is not resume],
-                 archives=[i for i in lignes if i.archive])
-
-
 MAX_FICHIERS, MAX_OCTETS = 100, 2 * 1024 * 1024
 
 
-@app.post("/projet/{slug}/importer", dependencies=[Depends(meme_origine)])
+@app.post("/projet/{slug:path}/importer", dependencies=[Depends(meme_origine)])
 async def importer_fichiers(slug: str, fichiers: list[UploadFile] = File(...), remplacer: str = Form(""),
                             user: str = Depends(utilisateur)):
     """Dépôt de fichiers .md (glisser-déposer) dans un projet. Réponse JSON, un résultat par fichier."""
@@ -542,7 +542,7 @@ async def importer_fichiers(slug: str, fichiers: list[UploadFile] = File(...), r
             res.update(etat="ignoré", detail="existe déjà")
             continue
         try:
-            store.ecrire(chemin, contenu, tags=[projet.slug], auteur=f"web:{user}",
+            store.ecrire(chemin, contenu, tags=projet.slug.split("/"), auteur=f"web:{user}",
                          message=f"Import de « {nom_fichier} »")
         except (ErreurContexte, ValueError) as e:
             res.update(etat="erreur", detail=str(e))
@@ -551,22 +551,43 @@ async def importer_fichiers(slug: str, fichiers: list[UploadFile] = File(...), r
     return {"resultats": resultats}
 
 
-@app.get("/projet/{slug}/modifier", response_class=HTMLResponse)
+@app.get("/projet/{slug:path}/modifier", response_class=HTMLResponse)
 def modifier_projet_form(request: Request, slug: str, user: str = Depends(utilisateur)):
-    return rendu(request, "projet_form.html", projet=store.lire_projet(slug))
+    projet = store.lire_projet(slug)
+    parent = store.lire_projet(projet.parent) if projet.parent else None
+    return rendu(request, "projet_form.html", projet=projet, parent=parent)
 
 
-@app.post("/projet/{slug}/modifier", dependencies=[Depends(meme_origine)])
+@app.post("/projet/{slug:path}/modifier", dependencies=[Depends(meme_origine)])
 def modifier_projet(slug: str, nouveau_slug: str = Form(...), titre: str = Form(""),
                     description: str = Form(""), user: str = Depends(utilisateur)):
     p, _ = store.modifier_projet(slug, titre, description, nouveau_slug, auteur=f"web:{user}")
-    return RedirectResponse(f"/projet/{p.slug}?msg={quote('Projet enregistré')}", status_code=303)
+    return RedirectResponse(f"/projet/{p.slug}?msg={quote('Enregistré')}", status_code=303)
 
 
-@app.post("/projet/{slug}/supprimer", dependencies=[Depends(meme_origine)])
+@app.post("/projet/{slug:path}/supprimer", dependencies=[Depends(meme_origine)])
 def supprimer_projet(slug: str, user: str = Depends(utilisateur)):
+    projet = store.lire_projet(slug)
     store.supprimer_projet(slug, auteur=f"web:{user}")
+    if projet.parent:
+        return RedirectResponse(f"/projet/{projet.parent}?msg={quote('Sous-projet supprimé')}", status_code=303)
     return RedirectResponse(f"/?msg={quote('Projet supprimé')}", status_code=303)
+
+
+# Déclarée après les routes /projet/<slug>/… : « {slug:path} » accepte aussi « maison/nas ».
+@app.get("/projet/{slug:path}", response_class=HTMLResponse)
+def voir_projet(request: Request, slug: str, msg: str = "", user: str = Depends(utilisateur)):
+    projet = store.lire_projet(slug)
+    parent = store.lire_projet(projet.parent) if projet.parent else None
+    info = indicateurs.analyser_projet(store, projet.slug)
+    lignes = sorted(info.directs if info else [], key=lambda i: i.doc.titre.lower())
+    resume = info.resume if info else None
+    docs = [d for d in store.lister(projet.slug) if d.conteneur == projet.slug]
+    sous = {s.slug: indicateurs.analyser_projet(store, s.slug) for s in projet.sous_projets}
+    return rendu(request, "projet.html", projet=projet, parent=parent, docs=docs, msg=msg, info=info,
+                 resume=resume, actifs=[i for i in lignes if not i.archive and i is not resume],
+                 archives=[i for i in lignes if i.archive], infos_sous=sous,
+                 procedures=projet.slug == PROJET_PROCEDURES)
 
 
 @app.get("/historique", response_class=HTMLResponse)

@@ -5,9 +5,24 @@
 <nav class="fil-ariane">
   <a href="/">Accueil</a><span>/</span>
   {% if projet %}<a href="/projet/{{ projet.slug }}">{{ projet.titre }}</a>{% else %}<span>Sans projet</span>{% endif %}
+  {% if sous_projet %}<span>/</span><a href="/projet/{{ sous_projet.slug }}">{{ sous_projet.titre }}</a>{% endif %}
 </nav>
 
 {% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+{% if directives and not version %}
+  <div class="bandeau-directives">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+    <span><strong>Directives globales.</strong> Ce document est transmis à Claude à chaque connexion au serveur MCP,
+      dans tous les clients (claude.ai, Desktop, VS Code, Claude Code). Restez bref : chaque ligne est chargée
+      dans chaque conversation{% if taille > 2000 %} — <strong>au-delà de ~2k tokens, seul un renvoi est transmis</strong>{% endif %}.</span>
+  </div>
+{% elif procedure and not version %}
+  <div class="bandeau-directives">
+    <svg viewBox="0 0 24 24" class="ic"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+    <span><strong>Procédure.</strong> Son titre est listé dans les instructions du serveur : Claude la lit avant
+      d'effectuer la tâche qu'elle couvre.</span>
+  </div>
+{% endif %}
 {% if version %}
   <div class="alerte">
     <span>Vous consultez l'ancienne version <code>{{ version }}</code>. <a href="/doc/{{ doc.chemin }}">Voir la version actuelle</a></span>
@@ -31,7 +46,7 @@
       <span>{{ taille|tokens }}</span>
       {% if sommaire %}<span>{{ sommaire|length }} section{{ 's' if sommaire|length > 1 }}</span>{% endif %}
       <span>modifié le {{ doc.maj|date_fr }}</span>
-      {% for t in doc.tags if t != doc.categorie %}<span class="tag">{{ t }}</span>{% endfor %}
+      {% for t in doc.tags if t not in doc.conteneur.split('/') %}<span class="tag">{{ t }}</span>{% endfor %}
     </div>
   </div>
   {% if not version %}
@@ -46,7 +61,9 @@
             <label>Projet
               <select name="projet">
                 <option value="" {{ 'selected' if not projet }}>— Sans projet —</option>
-                {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if projet and p.slug == projet.slug }}>{{ p.titre }}</option>{% endfor %}
+                {% for p in projets %}<option value="{{ p.slug }}" {{ 'selected' if p.slug == doc.conteneur }}>{{ p.titre }}</option>
+                  {% for sp in p.sous_projets %}<option value="{{ sp.slug }}" {{ 'selected' if sp.slug == doc.conteneur }}>&nbsp;&nbsp;↳ {{ sp.titre }}</option>{% endfor %}
+                {% endfor %}
               </select></label>
             <label>Nom <small class="note">minuscules, chiffres, tirets</small>
               <input name="nom" value="{{ doc.chemin.split('/')[-1] }}" pattern="[a-z0-9][a-z0-9\-]*" required></label>

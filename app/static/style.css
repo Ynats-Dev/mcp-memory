@@ -496,3 +496,21 @@ mark.trouve.actuelle{background:#ffc94d;box-shadow:0 0 0 2px #ffc94d}
   margin:0;padding:7px 10px 7px 14px;background:var(--surface);border:1px solid var(--bord-fort);border-radius:99px;box-shadow:var(--ombre-haute);font-size:.88rem}
 .barre-trouve .ic{width:16px;height:16px;color:var(--pale)}
 .barre-trouve button{padding:3px 10px;font-size:.85rem}
+
+/* Sous-projets */
+.groupe-projet{display:flex;flex-direction:column;gap:1px}
+.groupe-projet.en-deplacement{opacity:.4}
+.menu a.sous-nav{margin-left:21px;padding:4px 10px 4px 12px;font-size:.86rem;font-weight:400;border-left:1px solid var(--bord);border-radius:0 var(--rayon-petit) var(--rayon-petit) 0}
+.menu a.sous-nav.actif{padding:3px 9px 3px 11px}
+.menu a.parent-actif{color:var(--texte)}
+.grille-sous-projets{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.carte-sous-projet{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--bord);border-radius:var(--rayon-petit);background:var(--surface);color:var(--texte)}
+.carte-sous-projet:hover{text-decoration:none;box-shadow:var(--ombre)}
+.carte-sous-projet strong{display:flex;align-items:center;gap:8px}
+.carte-sous-projet strong svg{width:16px;height:16px;color:var(--pale)}
+.carte-sous-projet span{font-size:.85rem;color:var(--doux)}
+.carte-sous-projet .note{font-size:.78rem}
+.bandeau-directives{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;margin:0 0 16px;border:1px solid var(--bord);border-radius:var(--rayon-petit);background:var(--survol);font-size:.9rem}
+.bandeau-directives svg{width:18px;height:18px;flex:none;margin-top:2px}
+.champ-prefixe{display:flex;align-items:center;gap:4px}
+.champ-prefixe input{flex:1}

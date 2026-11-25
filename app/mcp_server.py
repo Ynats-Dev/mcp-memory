@@ -21,7 +21,7 @@ from starlette.responses import PlainTextResponse
 
 from . import sections as sec
 from . import usage
-from .store import Document, ErreurContexte, Store, empreinte, plier
+from .store import DOC_DIRECTIVES, PROJET_PROCEDURES, Document, ErreurContexte, Store, empreinte, plier
 
 log = logging.getLogger("contexte.mcp")
 store = Store()
@@ -40,10 +40,22 @@ Lecture (économise le contexte) :
   Supprime ce qui est périmé. Un incident résolu se résume en une ligne de cause/solution.
 - Tiens à jour la fiche `<projet>/resume` (~500 tokens : machines, adresses, rôles, accès)
   si un fait essentiel change ; crée-la si elle manque.
+Organisation :
+- Un projet peut avoir des sous-projets (`projet/sous-projet`, un seul niveau, chacun avec sa
+  fiche `projet/sous-projet/resume`). Passe `projet/sous-projet` à `vue_ensemble` et
+  `rechercher` pour ne charger que ce périmètre.
+- Si un sujet mérite un nouveau projet ou sous-projet, PROPOSE-le (identifiant, titre,
+  documents à y déplacer) et n'appelle `creer_projet` qu'après accord explicite.
 - Lis la section avant de la modifier. `ecrire_document` remplace tout : à éviter.
 - Décision validée → `enregistrer_decision`. Renseigne `auteur` et un `message` clair.
 - Uniquement des faits confirmés. Ne supprime un document que sur demande explicite.
+Directives et procédures :
+- Les directives globales de l'utilisateur (document `directives`) priment sur tes habitudes,
+  dans toutes les conversations. Une nouvelle consigne générale validée → l'y ajouter.
+- Avant une tâche couverte par une procédure (`procedures/…`), lis-la et suis-la.
 """
+
+MAX_DIRECTIVES = 2000             # tokens estimés : au-delà, renvoi vers le document
 
 JETON = os.environ.get("MCP_TOKEN", "")
 URL_PUBLIQUE = os.environ.get("MCP_PUBLIC_URL", "").strip().rstrip("/")
@@ -80,6 +92,45 @@ mcp = FastMCP(
 )
 
 
+def instructions_dynamiques() -> str:
+    """Instructions fixes + directives globales + liste des procédures, relues à chaque
+    connexion : une modification dans le contexte s'applique à la session suivante."""
+    morceaux = [INSTRUCTIONS]
+    try:
+        if store.existe(DOC_DIRECTIVES):
+            doc = store.lire(DOC_DIRECTIVES)
+            contenu = doc.contenu.strip()
+            if contenu.startswith(f"# {doc.titre}\n"):
+                contenu = contenu.split("\n", 1)[1].strip()
+            if sec.tokens(contenu) > MAX_DIRECTIVES:
+                contenu = (f"(document trop long pour être transmis ici : le lire avec "
+                           f"`lire_document(\"{DOC_DIRECTIVES}\", complet=true)` dès le début)")
+            morceaux.append(f"\nDIRECTIVES GLOBALES DE L'UTILISATEUR (à respecter en toutes circonstances) :\n"
+                            f"{contenu}\n")
+        procedures = [d for d in store.lister(PROJET_PROCEDURES) if not d.chemin.endswith("/resume")]
+        if procedures:
+            morceaux.append("Procédures disponibles (`lire_document` avant d'agir) :\n"
+                            + "\n".join(f"- `{d.chemin}` — {d.titre}" for d in procedures) + "\n")
+    except Exception:  # le contexte ne doit jamais empêcher la connexion
+        log.exception("Lecture des directives impossible")
+    return "".join(morceaux)
+
+
+class _ServeurInstructionsDynamiques(type(mcp._mcp_server)):
+    """Le SDK lit `instructions` à chaque initialisation : on les recalcule à la volée."""
+
+    @property
+    def instructions(self):
+        return instructions_dynamiques()
+
+    @instructions.setter
+    def instructions(self, valeur):
+        pass
+
+
+mcp._mcp_server.__class__ = _ServeurInstructionsDynamiques
+
+
 @mcp.custom_route("/sante", methods=["GET"])
 async def sante(request: Request) -> PlainTextResponse:
     return PlainTextResponse("ok")
@@ -101,30 +152,48 @@ SEUIL_COMPLET = 4000  # au-delà (en tokens estimés), lire_document renvoie le 
 
 def _ligne_doc(d: Document) -> str:
     """Une ligne d'index : chemin, titre, tags utiles (hors nom du projet), taille."""
-    tags = [t for t in d.tags if t not in (d.categorie, "archive")]
+    tags = [t for t in d.tags if t not in (d.categorie, d.conteneur.split("/")[-1], "archive")]
     tags = f" [{', '.join(tags)}]" if tags else ""
     archive = " — archive, à ne lire qu'en cas de besoin" if "archive" in d.tags else ""
     return f"- `{d.chemin}` — {d.titre}{tags} ({sec.taille(d.contenu)}{archive})"
 
 
+def _ligne_sous_projet(p) -> str:
+    desc = f" : {p.description}" if p.description else ""
+    return f"- 📁 `{p.slug}` — {p.titre} ({p.nb} doc.){desc}"
+
+
 def _index(projet: str | None = None) -> str:
-    projets = {p.slug: p for p in store.lister_projets()}
-    filtre = projet.strip().lower() if projet else None
-    if filtre and filtre not in projets and filtre != "general":
-        raise ErreurContexte(f"Projet « {filtre} » inconnu. Projets : {', '.join(projets) or 'aucun'}.")
-    par_cat: dict[str, list[Document]] = {}
+    """Index des documents. Les sous-projets n'y figurent qu'en une ligne : leur contenu
+    s'obtient avec `vue_ensemble(projet="projet/sous-projet")`."""
+    conteneurs = {p.slug: p for p in store.lister_conteneurs()}
+    filtre = projet.strip().strip("/").lower() if projet else None
+    if filtre and filtre not in conteneurs and filtre != "general":
+        connus = ", ".join(conteneurs) or "aucun"
+        raise ErreurContexte(f"Projet « {filtre} » inconnu. Projets et sous-projets : {connus}.")
+    par_conteneur: dict[str, list[Document]] = {}
     for d in store.lister(filtre):
-        par_cat.setdefault(d.categorie, []).append(d)
+        par_conteneur.setdefault(d.conteneur, []).append(d)
     lignes = []
-    for cat in ["general"] * ("general" in par_cat) + list(projets):
-        if filtre and cat != filtre:
-            continue
-        p = projets.get(cat)
-        lignes.append(f"\n## {p.titre} (projet `{cat}`)" if p else "\n## Sans projet")
-        if p and p.description:
-            lignes.append(f"_{p.description}_")
-        docs = [d for d in par_cat.get(cat, []) if not (filtre and d.chemin == f"{filtre}/resume")]
-        lignes += [_ligne_doc(d) for d in docs] or ["- (aucun document)"]
+    if filtre:
+        affiches = [filtre]
+    else:
+        affiches = ["general"] * ("general" in par_conteneur) + [s for s in conteneurs if "/" not in s]
+    for cle in affiches:
+        p = conteneurs.get(cle)
+        if p is None:
+            lignes.append("\n## Sans projet")
+        else:
+            genre = "sous-projet" if p.parent else "projet"
+            lignes.append(f"\n## {p.titre} ({genre} `{cle}`)")
+            if p.description:
+                lignes.append(f"_{p.description}_")
+        docs = [d for d in par_conteneur.get(cle, []) if not (filtre and d.chemin == f"{filtre}/resume")]
+        sous = p.sous_projets if p else []
+        lignes += [_ligne_doc(d) for d in docs]
+        lignes += [_ligne_sous_projet(s) for s in sous]
+        if not docs and not sous:
+            lignes.append("- (aucun document)")
     return "# Index du contexte\n" + "\n".join(lignes)
 
 
@@ -134,9 +203,9 @@ def _ok(doc: Document, sha: str | None) -> str:
 
 # ------------------------------------------------------------------ outils
 # Descriptions volontairement courtes : elles sont chargées dans chaque conversation.
-# Restauration, suppression et création de projet se font dans l'interface web.
+# Restauration, suppression et renommage de projet se font dans l'interface web.
 def _resume(projet: str | None) -> str:
-    chemin = f"{projet.strip().lower()}/resume" if projet else "resume"
+    chemin = f"{projet.strip().strip('/').lower()}/resume" if projet else "resume"
     if store.existe(chemin):
         doc = store.lire(chemin)
         contenu = doc.contenu.strip()
@@ -151,14 +220,14 @@ def _resume(projet: str | None) -> str:
 @usage.journaliser
 def vue_ensemble(projet: str | None = None) -> str:
     """À appeler en premier. Fiche résumé + index des documents (avec taille).
-    projet : identifiant (ex. maison) pour se limiter à ce projet."""
+    projet : projet (maison) ou sous-projet (maison/nas) pour se limiter à ce périmètre."""
     return f"{_resume(projet)}\n\n---\n\n{_index(projet)}"
 
 
 @mcp.tool(structured_output=False)
 @usage.journaliser
 def lister_documents(categorie: str | None = None) -> str:
-    """Documents (chemin, titre, taille). categorie : identifiant du projet, ou general."""
+    """Documents (chemin, titre, taille). categorie : projet, projet/sous-projet, ou general."""
     docs = store.lister(categorie)
     return "\n".join(_ligne_doc(d) for d in docs) or "Aucun document."
 
@@ -175,7 +244,7 @@ def plan_document(chemin: str) -> str:
 @mcp.tool(structured_output=False)
 @usage.journaliser
 def lire_document(chemin: str, section: str | None = None, complet: bool = False) -> str:
-    """Lit un document (chemin : projet/nom). section : numéro (2.3) ou titre, sous-sections
+    """Lit un document (chemin : projet/nom ou projet/sous-projet/nom). section : numéro (2.3) ou titre, sous-sections
     comprises. Sans section, un document long renvoie son sommaire sauf si complet=true."""
     doc = store.lire(chemin)
     if section:
@@ -201,10 +270,11 @@ def _score(doc: Document, termes: list[str]) -> int:
 @usage.journaliser
 def rechercher(requete: str, projet: str | None = None, limite: int = 8, archives: bool = False) -> str:
     """Recherche plein texte (tous les mots), triée par pertinence ; donne la section de chaque passage.
+    projet : projet ou projet/sous-projet (sous-projets compris).
     archives=true inclut les documents archivés (journaux, historiques)."""
     termes = [t for t in plier(requete).split() if t]
     res = [doc for doc, _ in store.rechercher(requete, 1000)
-           if (not projet or doc.categorie == projet.strip().lower()) and (archives or "archive" not in doc.tags)]
+           if doc.dans(projet) and (archives or "archive" not in doc.tags)]
     if not res:
         return "Aucun résultat."
     res.sort(key=lambda d: -_score(d, termes))
@@ -295,7 +365,7 @@ def enregistrer_decision(
 @mcp.tool(structured_output=False)
 @usage.journaliser
 def deplacer_document(chemin: str, nouveau_chemin: str, auteur: str = "assistant") -> str:
-    """Déplace ou renomme un document (l'historique suit)."""
+    """Déplace ou renomme un document (l'historique suit), y compris vers un sous-projet."""
     doc, sha = store.deplacer(chemin, nouveau_chemin, auteur)
     return f"OK : « {chemin} » déplacé vers « {doc.chemin} » (version {sha})."
 
@@ -303,10 +373,26 @@ def deplacer_document(chemin: str, nouveau_chemin: str, auteur: str = "assistant
 @mcp.tool(structured_output=False)
 @usage.journaliser
 def lister_projets() -> str:
-    """Projets : identifiant (= préfixe des chemins), titre, nombre de documents."""
-    projets = store.lister_projets()
-    return "\n".join(f"- `{p.slug}` — {p.titre} ({p.nb} doc.)" + (f" : {p.description}" if p.description else "")
-                     for p in projets) or "Aucun projet."
+    """Projets et sous-projets : identifiant (= préfixe des chemins), titre, nombre de documents."""
+    lignes = []
+    for p in store.lister_projets():
+        lignes.append(f"- `{p.slug}` — {p.titre} ({p.nb} doc.)" + (f" : {p.description}" if p.description else ""))
+        lignes += ["  " + _ligne_sous_projet(s) for s in p.sous_projets]
+    return "\n".join(lignes) or "Aucun projet."
+
+
+@mcp.tool(structured_output=False)
+@usage.journaliser
+def creer_projet(
+    identifiant: str, titre: str, description: str = "", parent: str | None = None, auteur: str = "assistant"
+) -> str:
+    """Crée un projet, ou un sous-projet si parent est donné (un seul niveau).
+    UNIQUEMENT après accord explicite de l'utilisateur sur la proposition (identifiant, titre).
+    identifiant : minuscules, chiffres, tirets (ex. nas). Ensuite : fiche <id>/resume, déplacements."""
+    projet, sha = store.creer_projet(identifiant, titre, description, auteur, parent=parent)
+    genre = "Sous-projet" if projet.parent else "Projet"
+    return (f"OK : {genre.lower()} « {projet.slug} » créé" + (f" (version {sha})." if sha else ".")
+            + f" Documents : « {projet.slug}/<nom> » ; fiche résumé : « {projet.slug}/resume ».")
 
 
 @mcp.tool(structured_output=False)
@@ -351,6 +437,12 @@ def ressource_doc(nom: str) -> str:
 def ressource_doc_categorie(categorie: str, nom: str) -> str:
     """Document rangé dans une catégorie (ex. contexte://doc/regles/combat)."""
     return _fiche(store.lire(f"{categorie}/{nom}"))
+
+
+@mcp.resource("contexte://doc/{categorie}/{sous_projet}/{nom}", mime_type="text/markdown")
+def ressource_doc_sous_projet(categorie: str, sous_projet: str, nom: str) -> str:
+    """Document d'un sous-projet (ex. contexte://doc/maison/nas/procedures)."""
+    return _fiche(store.lire(f"{categorie}/{sous_projet}/{nom}"))
 
 
 @mcp.prompt()
