@@ -6,9 +6,11 @@
   <div>
     <p class="surtitre">Application</p>
     <h1>Mise à jour</h1>
-    <p class="sous">Compare la version en service au dépôt Git, puis met à jour et redémarre en un clic.</p>
+    <p class="sous">Compare la version en service au dépôt de référence, puis met à jour et redémarre en un clic.</p>
   </div>
 </header>
+{% if msg %}<p class="info">{{ msg }}</p>{% endif %}
+{% if erreur %}<p class="alerte"><span>{{ erreur }}</span></p>{% endif %}
 
 {% if not etat.installe %}
 <section class="carte">
@@ -38,9 +40,40 @@ sudo scripts/installer-maj.sh</pre>
       <svg viewBox="0 0 24 24" class="ic"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Mettre à jour et redémarrer</button>
     <button type="button" id="maj-verifier">Vérifier maintenant</button>
   </div>
-  <p class="note">La mise à jour fait <code>git pull</code> puis reconstruit et redémarre les conteneurs
+  <p class="note">La mise à jour récupère le dépôt de référence (ci-dessous) puis reconstruit et redémarre les conteneurs
      (une à deux minutes) ; les documents ne sont pas touchés. Claude Desktop peut demander à être relancé
      si la liste des outils MCP a changé.</p>
+</section>
+
+{% set cfg = etat.config %}
+<section class="carte" id="depot">
+  <div class="titre-bloc">
+    <h2>Dépôt de référence</h2>
+    {% if cfg.defaut %}<span class="pastille ok">Par défaut</span>{% else %}<span class="pastille dispo">Personnalisé</span>{% endif %}
+  </div>
+  <p class="note">Dépôt Git d'où viennent les mises à jour. Par défaut : <code>{{ cfg.url_defaut }}</code>
+     (branche <code>{{ cfg.branche_defaut }}</code>).</p>
+  <form method="post" action="/mise-a-jour/depot" class="formulaire">
+    <label>Adresse du dépôt <small class="note">https://…, ssh://… ou git@hôte:chemin — sans identifiants</small>
+      <input name="url" value="{{ cfg.url }}" required spellcheck="false" autocomplete="off"></label>
+    <label>Branche
+      <input name="branche" value="{{ cfg.branche }}" required spellcheck="false" autocomplete="off"
+             pattern="[A-Za-z0-9._/\-]+"></label>
+    <div class="actions">
+      <button class="primaire">Enregistrer</button>
+      {% if not cfg.defaut %}
+      <button class="lien" formaction="/mise-a-jour/depot/defaut" formnovalidate
+              onclick="return confirm('Revenir au dépôt par défaut ({{ cfg.url_defaut }}, {{ cfg.branche_defaut }}) ?')">
+        Revenir au dépôt par défaut</button>
+      {% endif %}
+    </div>
+  </form>
+  <p class="note">Enregistrer ne change que la source comparée : rien n'est installé avant un clic sur
+     « Mettre à jour ». Le code de ce dépôt est ensuite construit et exécuté sur le serveur : n'indiquer
+     qu'un dépôt de confiance. Dépôt privé : configurer l'accès sur l'hôte (clé SSH ou gestionnaire
+     d'identifiants Git de l'utilisateur du service). Si son historique n'a pas de lien avec la version
+     installée, la mise à jour aligne le dossier du serveur sur ce dépôt (fichiers non suivis comme
+     <code>.env</code> conservés ; le commit précédent est noté dans le journal).</p>
 </section>
 
 <details class="carte deroulant-journal" id="maj-journal-bloc" {{ 'open' if etat.statut == 'erreur' }}>
@@ -82,14 +115,16 @@ sudo scripts/installer-maj.sh</pre>
       ? "<code>" + esc(e.version) + "</code>" + (e.local === e.version && e.local_sujet ? " — " + esc(e.local_sujet) : "")
         + (e.local_date && e.local === e.version ? " <span class='note'>(" + quand(e.local_date) + ")</span>" : "")
       : "inconnue";
-    $("maj-distant").innerHTML = e.distant
-      ? "<code>" + esc(e.distant) + "</code>" + (e.branche ? " <span class='note'>(origin/" + esc(e.branche) + ")</span>" : "")
-      : "—";
+    $("maj-distant").innerHTML = (e.distant ? "<code>" + esc(e.distant) + "</code> " : "")
+      + (e.depot ? "<span class='note'>" + esc(e.depot) + " · " + esc(e.depot_branche) + "</span>" : (e.distant ? "" : "—"));
     $("maj-verifie").textContent = quand(e.verifie_le);
     $("maj-maj").textContent = quand(e.maj_le);
 
     var alertes = [];
     if (e.hote_inactif) alertes.push("La demande n'a pas été prise en charge. Sur le serveur : <code>systemctl status mcp-memory-maj.path</code> (ou relancer <code>sudo scripts/installer-maj.sh</code>).");
+    if (e.config_erreur) alertes.push("Configuration du dépôt de référence refusée par l'hôte : " + esc(e.config_erreur) + ".");
+    if (e.config_a_verifier && !enCours(e)) alertes.push("Le dépôt de référence a changé depuis la dernière vérification : cliquer sur « Vérifier maintenant ».");
+    if (e.diverge && e.disponible && !enCours(e)) alertes.push("La version installée ne vient pas de l'historique de ce dépôt : « Mettre à jour » alignera le serveur sur <code>" + esc(e.depot_branche) + "</code> de ce dépôt.");
     if (e.modifs_locales) alertes.push("Le dossier du serveur contient des modifications locales : la mise à jour sera refusée tant qu'elles existent.");
     if (e.decalage && !enCours(e)) alertes.push("La version en service (<code>" + esc(e.version) + "</code>) diffère du dépôt local (<code>" + esc(e.local) + "</code>) : « Mettre à jour » reconstruira les conteneurs.");
     $("maj-alerte").innerHTML = alertes.map(function (a) { return "<p class='alerte'><span>" + a + "</span></p>"; }).join("");
@@ -102,7 +137,7 @@ sudo scripts/installer-maj.sh</pre>
       : "";
 
     var occupe = enCours(e) && !e.hote_inactif || redemarrage;
-    $("maj-appliquer").disabled = occupe;
+    $("maj-appliquer").disabled = occupe || !!e.config_a_verifier;
     $("maj-verifier").disabled = occupe;
     $("maj-appliquer").classList.toggle("primaire", !!(e.disponible || e.decalage) || e.statut === "erreur");
     if (e.journal !== undefined) $("maj-journal").textContent = e.journal || "(vide)";

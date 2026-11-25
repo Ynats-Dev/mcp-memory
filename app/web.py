@@ -330,13 +330,42 @@ def sauvegarder_maintenant(user: str = Depends(utilisateur)):
 
 # ------------------------------------------------------------ mise à jour de l'application
 @app.get("/mise-a-jour", response_class=HTMLResponse)
-def mise_a_jour_page(request: Request, user: str = Depends(utilisateur)):
-    return rendu(request, "maj.html", etat=maj.etat(), journal=maj.journal())
+def mise_a_jour_page(request: Request, msg: str = "", erreur: str = "", user: str = Depends(utilisateur)):
+    return rendu(request, "maj.html", etat=maj.etat(), journal=maj.journal(), msg=msg, erreur=erreur)
 
 
 @app.get("/mise-a-jour/etat")
 def mise_a_jour_etat(user: str = Depends(utilisateur)):
     return JSONResponse({**maj.etat(), "journal": maj.journal()}, headers={"Cache-Control": "no-store"})
+
+
+def _verifier_apres_config() -> str:
+    """Lance une vérification sur le nouveau dépôt de référence, si le service hôte est libre."""
+    try:
+        maj.demander("verifier")
+        return " Vérification lancée."
+    except (RuntimeError, ValueError):
+        return " Cliquer sur « Vérifier maintenant » pour comparer avec ce dépôt."
+
+
+@app.post("/mise-a-jour/depot", dependencies=[Depends(meme_origine)])
+def mise_a_jour_depot(url: str = Form(""), branche: str = Form(""), user: str = Depends(utilisateur)):
+    try:
+        maj.enregistrer_config(url, branche)
+    except (ValueError, RuntimeError) as e:
+        return RedirectResponse(f"/mise-a-jour?{urlencode({'erreur': str(e)})}#depot", status_code=303)
+    msg = "Dépôt de référence enregistré." + _verifier_apres_config()
+    return RedirectResponse(f"/mise-a-jour?{urlencode({'msg': msg})}#depot", status_code=303)
+
+
+@app.post("/mise-a-jour/depot/defaut", dependencies=[Depends(meme_origine)])
+def mise_a_jour_depot_defaut(user: str = Depends(utilisateur)):
+    try:
+        maj.reinitialiser_config()
+    except RuntimeError as e:
+        return RedirectResponse(f"/mise-a-jour?{urlencode({'erreur': str(e)})}#depot", status_code=303)
+    msg = "Dépôt par défaut rétabli." + _verifier_apres_config()
+    return RedirectResponse(f"/mise-a-jour?{urlencode({'msg': msg})}#depot", status_code=303)
 
 
 @app.post("/mise-a-jour/{action}", dependencies=[Depends(meme_origine)])

@@ -173,9 +173,9 @@ cd /opt/mcp-memory && docker compose exec web python -m app.compte reinitialiser
 
 ## Mise à jour de l'application (bouton)
 
-Menu **Mise à jour** : affiche la version en service, les nouveaux commits du dépôt (un point
-signale qu'il y en a) et met à jour en un clic (`git pull --ff-only`, puis
-`docker compose up -d --build`, soit une à deux minutes d'indisponibilité ; les documents ne
+Menu **Mise à jour** : affiche la version en service, les nouveaux commits du dépôt de
+référence (un point signale qu'il y en a) et met à jour en un clic (récupération du dépôt
+de référence, puis `docker compose up -d --build`, soit une à deux minutes d'indisponibilité ; les documents ne
 sont pas touchés).
 
 L'interface n'a accès ni à Docker ni au dépôt. Elle dépose une demande dans `.maj/`, monté
@@ -190,6 +190,26 @@ sudo scripts/installer-maj.sh            # --retirer pour désinstaller
 Le service tourne sous le propriétaire du dépôt (qui doit être dans le groupe `docker`), sinon
 en root. En cas de problème : `systemctl status mcp-memory-maj.path`, `.maj/derniere.log`.
 Une mise à jour est refusée si le dossier contient des modifications locales.
+
+**Dépôt de référence.** Par défaut, les mises à jour viennent de
+`https://github.com/Ynats-Dev/mcp-memory.git` (branche `master`). La carte **Dépôt de
+référence** de la page Mise à jour permet d'indiquer un autre dépôt (un fork, un miroir
+interne) et sa branche, et **Revenir au dépôt par défaut** le rétablit en un clic.
+
+- Le réglage est écrit dans `.maj/depot` (`url=…`, `branche=…`), relu et validé par le
+  service hôte. L'hôte suit ce dépôt avec un remote dédié, `reference` : le remote `origin`
+  du dossier n'est jamais modifié.
+- Adresses acceptées : `https://…`, `ssh://…` ou `git@hôte:chemin`, sans identifiants. Pour un
+  dépôt privé, configurer l'accès sur l'hôte (clé SSH ou gestionnaire d'identifiants Git de
+  l'utilisateur du service).
+- Enregistrer ne fait que lancer une vérification ; rien n'est installé avant « Mettre à jour ».
+  Le code du dépôt choisi est construit et exécuté sur le serveur : n'indiquez qu'un dépôt
+  de confiance.
+- Si l'historique du dépôt choisi n'a pas de lien avec la version installée (dossier cloné
+  depuis un autre dépôt), la mise à jour aligne le dossier sur la référence
+  (`git reset --hard`) au lieu d'une simple avance. Les fichiers non suivis (`.env`,
+  `.maj/`, `sauvegardes/`) sont conservés, et le commit précédent est noté dans le journal
+  pour revenir en arrière si besoin (`git reset --hard <commit>`).
 
 ## Connexion des clients
 
